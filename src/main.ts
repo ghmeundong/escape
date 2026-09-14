@@ -25,6 +25,7 @@ app.innerHTML = `
       <canvas id="range-canvas" aria-label="Escape game view"></canvas>
       <div class="crosshair" aria-hidden="true"><span></span><i></i><b></b><em></em></div>
       <div class="hit-marker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="episode-fade-overlay" aria-hidden="true"></div>
       <button class="settings-button" type="button" aria-label="Open settings" title="Open settings">⚙</button>
       <button class="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button>
       <div class="settings-overlay" aria-hidden="true">
@@ -64,6 +65,26 @@ const canvas = document.querySelector<HTMLCanvasElement>('#range-canvas')!
 const crosshair = document.querySelector<HTMLElement>('.crosshair')!
 const hitMarker = document.querySelector<HTMLElement>('.hit-marker')!
 const range = document.querySelector<HTMLElement>('.range')!
+const keyPickupPrompt = document.createElement('div')
+keyPickupPrompt.className = 'interaction-prompt'
+keyPickupPrompt.textContent = 'PRESS [F] TO PICK UP KEY'
+keyPickupPrompt.hidden = true
+range.append(keyPickupPrompt)
+const vehicleSearchHint = document.createElement('div')
+vehicleSearchHint.className = 'vehicle-search-hint'
+vehicleSearchHint.textContent = '[P]: PANIC BUTTON'
+vehicleSearchHint.hidden = true
+range.append(vehicleSearchHint)
+const trueCarPrompt = document.createElement('div')
+trueCarPrompt.className = 'interaction-prompt'
+trueCarPrompt.textContent = 'PRESS [F] TO ENTER'
+trueCarPrompt.hidden = true
+range.append(trueCarPrompt)
+const trueCarSoundIndicator = document.createElement('div')
+trueCarSoundIndicator.className = 'true-car-sound-indicator'
+trueCarSoundIndicator.hidden = true
+range.append(trueCarSoundIndicator)
+const episodeFadeOverlay = document.querySelector<HTMLElement>('.episode-fade-overlay')!
 const scopeOverlay = document.createElement('div')
 scopeOverlay.className = 'scope-overlay'
 scopeOverlay.innerHTML = '<div class="scope-reticle"><span></span><i></i><b></b><em></em></div>'
@@ -279,10 +300,18 @@ const keyEspToggleLabel = document.createElement('label')
 keyEspToggleLabel.className = 'toggle-row'
 keyEspToggleLabel.textContent = 'KEY ESP OUTLINE '
 keyEspToggleLabel.append(keyEspSetting)
+const trueCarEspSetting = document.createElement('input')
+trueCarEspSetting.id = 'true-car-esp-setting'
+trueCarEspSetting.type = 'checkbox'
+trueCarEspSetting.checked = false
+const trueCarEspToggleLabel = document.createElement('label')
+trueCarEspToggleLabel.className = 'toggle-row'
+trueCarEspToggleLabel.textContent = 'TRUE CAR ESP OUTLINE '
+trueCarEspToggleLabel.append(trueCarEspSetting)
 const developerTestGroup = document.createElement('div')
 developerTestGroup.className = 'developer-test-group'
 developerTestGroup.innerHTML = '<h2>DEVELOPER TEST OPTIONS</h2>'
-developerTestGroup.append(hideAllCarsToggleLabel, keyEspToggleLabel)
+developerTestGroup.append(hideAllCarsToggleLabel, keyEspToggleLabel, trueCarEspToggleLabel)
 displayCategoryPanel?.append(developerTestGroup)
 const crosshairOutlineColorSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-color-setting')!
 const crosshairOutlineThicknessSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-thickness-setting')!
@@ -392,6 +421,13 @@ const parkingObstacles: THREE.Box3[] = []
 const parkingObstacleCellSize = 8
 const parkingObstacleCells = new Map<string, THREE.Box3[]>()
 const keyEspObjects: THREE.Object3D[] = []
+const trueCarEspObjects: THREE.Object3D[] = []
+let parkedCarsReady = false
+let keyPickupObject: THREE.Object3D | null = null
+let keyPickupCollected = false
+let trueCar: THREE.Object3D | null = null
+let trueCarEntered = false
+let trueCarSoundPlaying = false
 
 function addParkingObstacle(bounds: THREE.Box3): void {
   parkingObstacles.push(bounds)
@@ -453,13 +489,14 @@ function getRandomKeySpawnPosition(): THREE.Vector3 | null {
   const minZ = bounds.min.z + 2
   const maxZ = bounds.max.z - 2
 
-  for (let attempt = 0; attempt < 250; attempt += 1) {
+  for (let attempt = 0; attempt < 1200; attempt += 1) {
     const x = THREE.MathUtils.randFloat(minX, maxX)
-    const z = THREE.MathUtils.randFloat(minZ, maxZ)
+    const zDistribution = Math.random() < 0.75 ? Math.pow(Math.random(), 0.45) : Math.random()
+    const z = THREE.MathUtils.lerp(minZ, maxZ, zDistribution)
 
     const nearStoreEntry = Math.abs(x - storeEntryPosition.x) < 3 && Math.abs(z - storeEntryPosition.z) < 3
     if (nearStoreEntry) continue
-    if (overlapsParkingObstacle(x, z, 0.85)) continue
+    if (overlapsParkingObstacle(x, z, 1.1)) continue
 
     parkingGroundRaycaster.set(new THREE.Vector3(x, 30, z), new THREE.Vector3(0, -1, 0))
     const hits = parkingGroundRaycaster.intersectObject(parkingLotRoot, true)
@@ -467,7 +504,7 @@ function getRandomKeySpawnPosition(): THREE.Vector3 | null {
     if (!hit || !hit.face) continue
 
     const worldFaceNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
-    if (worldFaceNormal.y < 0.92) continue
+    if (worldFaceNormal.y < 0.2) continue
 
     return new THREE.Vector3(x, hit.point.y + 0.02, z)
   }
@@ -598,12 +635,16 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
         rotationY: sixthRowRotationY,
       },
     ]
+    const trueCarSlotIndex = Math.floor(Math.random() * carRows.reduce((total, row) => total + row.count, 0))
+    let parkedCarIndex = 0
 
     for (const [rowIndex, row] of carRows.entries()) {
       const rowZStep = (row.endZ - row.startZ) / (row.count - 1)
 
       for (let index = 0; index < row.count; index += 1) {
         const parkedCar = rowIndex === 0 && index === 0 ? car : car.clone(true)
+        if (parkedCarIndex === trueCarSlotIndex) trueCar = parkedCar
+        parkedCarIndex += 1
         parkedCar.updateMatrixWorld(true)
         const parkedCarBottomY = carTemplateBounds.min.y
 
@@ -639,6 +680,31 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
           }
         })
 
+        if (parkedCar === trueCar) {
+          const outlineMaterial = new THREE.LineBasicMaterial({
+            color: '#d6dde0',
+            transparent: true,
+            opacity: 0.95,
+            blending: THREE.AdditiveBlending,
+            depthTest: false,
+            depthWrite: false,
+            fog: false,
+            toneMapped: false,
+          })
+          parkedCar.traverse((object) => {
+            if (!(object instanceof THREE.Mesh)) return
+            const outline = new THREE.LineSegments(new THREE.EdgesGeometry(object.geometry, 20), outlineMaterial)
+            outline.position.copy(object.position)
+            outline.rotation.copy(object.rotation)
+            outline.scale.copy(object.scale)
+            outline.frustumCulled = false
+            outline.renderOrder = 1000
+            parkedCar.add(outline)
+            trueCarEspObjects.push(outline)
+          })
+          trueCarEspObjects.forEach((outline) => { outline.visible = trueCarEspSetting.checked })
+        }
+
         const carWorldBounds = new THREE.Box3().setFromObject(parkedCar)
         const carCollisionBounds = carWorldBounds.clone().expandByScalar(0.04)
         addParkingObstacle(carCollisionBounds)
@@ -647,6 +713,7 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
         scene.add(parkedCar)
       }
     }
+    parkedCarsReady = true
   }, undefined, (error) => {
     console.error('Failed to load car model.', error)
   })
@@ -788,21 +855,20 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
     storeSpawnPosition.y = playerHeight
     const storeEntrySize = storeBounds.getSize(new THREE.Vector3())
     storeEntryPosition.set(storeBounds.min.x + Math.min(1.2, storeEntrySize.x * 0.12), playerHeight, (storeBounds.min.z + storeBounds.max.z) * 0.5)
+    store.visible = false
 
     const keyLoader = new FBXLoader()
     const keyUrl = new URL('./assets/key/Key.fbx', import.meta.url).href
     keyLoader.load(keyUrl, (keyModel) => {
+      keyPickupObject = keyModel
       keyModel.scale.setScalar(0.55)
       keyModel.rotation.x = Math.PI / 2
-
-      const keySpawnPosition = getRandomKeySpawnPosition() ?? new THREE.Vector3(storeEntryPosition.x - 1.8, 0.02, storeEntryPosition.z)
-      keyModel.position.copy(keySpawnPosition)
-      keyModel.updateMatrixWorld(true)
 
       const keyMeshes: THREE.Mesh[] = []
       keyModel.traverse((object) => {
         if (object instanceof THREE.Mesh) {
           keyMeshes.push(object)
+          object.frustumCulled = false
           object.castShadow = false
           object.receiveShadow = false
 
@@ -847,6 +913,7 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
         outline.position.copy(mesh.position)
         outline.rotation.copy(mesh.rotation)
         outline.scale.copy(mesh.scale)
+        outline.frustumCulled = false
         outline.renderOrder = 1000
         keyModel.add(outline)
         keyEspObjects.push(outline)
@@ -855,13 +922,31 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
         outerOutline.position.copy(mesh.position)
         outerOutline.rotation.copy(mesh.rotation)
         outerOutline.scale.set(mesh.scale.x * 1.035, mesh.scale.y * 1.035, mesh.scale.z * 1.035)
+        outerOutline.frustumCulled = false
         outerOutline.renderOrder = 999
         keyModel.add(outerOutline)
         keyEspObjects.push(outerOutline)
       }
       keyEspObjects.forEach((outline) => { outline.visible = keyEspSetting.checked })
 
-      scene.add(keyModel)
+      const placeKeyWhenReady = () => {
+        if (!parkedCarsReady) {
+          requestAnimationFrame(placeKeyWhenReady)
+          return
+        }
+
+        const keySpawnPosition = getRandomKeySpawnPosition()
+        if (!keySpawnPosition) {
+          requestAnimationFrame(placeKeyWhenReady)
+          return
+        }
+
+        keyModel.position.copy(keySpawnPosition)
+        keyModel.updateMatrixWorld(true)
+        scene.add(keyModel)
+      }
+      placeKeyWhenReady()
+
     }, undefined, (error) => {
       console.error('Failed to load key pickup model.', error)
     })
@@ -924,6 +1009,11 @@ hideAllCarsSetting.addEventListener('change', () => {
 keyEspSetting.addEventListener('change', () => {
   keyEspObjects.forEach((outline) => {
     outline.visible = keyEspSetting.checked
+  })
+})
+trueCarEspSetting.addEventListener('change', () => {
+  trueCarEspObjects.forEach((outline) => {
+    outline.visible = trueCarEspSetting.checked
   })
 })
 document.querySelector<HTMLElement>('[data-category="targets"]')?.remove()
@@ -1048,12 +1138,19 @@ const muzzleLocalPosition = new THREE.Vector3()
 const pistolSoundUrl = new URL('./assets/sounds/freesound_community-9mm-pistol-shoot-short-reverb-7152.mp3', import.meta.url).href
 const gunshotAudioContext = new AudioContext()
 let gunshotBuffer: AudioBuffer | null = null
+let trueCarSoundBuffer: AudioBuffer | null = null
 let soundVolumeMultiplier = 0.5
 void fetch(pistolSoundUrl)
   .then((response) => response.arrayBuffer())
   .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
   .then((buffer) => { gunshotBuffer = buffer })
   .catch((error: unknown) => console.error('Gunshot audio failed to load.', error))
+const trueCarSoundUrl = new URL('./assets/sounds/universfield-car-horn-02-153260.mp3', import.meta.url).href
+void fetch(trueCarSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => { trueCarSoundBuffer = buffer })
+  .catch((error: unknown) => console.error('True car audio failed to load.', error))
 
 function resolveWeaponForMode(_mode: ShootingMode): WeaponId {
   return 'pistol'
@@ -1143,6 +1240,36 @@ function playGunshot(): void {
 
 function warmGunshotAudio(): void {
   if (gunshotAudioContext.state === 'suspended') void gunshotAudioContext.resume()
+}
+
+function playTrueCarSound(): void {
+  if (!trueCarSoundBuffer || !trueCar || !keyPickupCollected) return
+  trueCarBounds.setFromObject(trueCar)
+  trueCarBounds.getCenter(trueCarWorldPosition)
+
+  const source = gunshotAudioContext.createBufferSource()
+  const gain = gunshotAudioContext.createGain()
+  const panner = gunshotAudioContext.createPanner()
+  panner.panningModel = 'HRTF'
+  panner.distanceModel = 'inverse'
+  panner.refDistance = 4
+  panner.maxDistance = 120
+  panner.rolloffFactor = 1
+  panner.positionX.value = trueCarWorldPosition.x
+  panner.positionY.value = trueCarWorldPosition.y
+  panner.positionZ.value = trueCarWorldPosition.z
+  source.buffer = trueCarSoundBuffer
+  gain.gain.value = soundVolumeMultiplier
+  source.connect(gain)
+  gain.connect(panner)
+  panner.connect(gunshotAudioContext.destination)
+  trueCarSoundPlaying = true
+  trueCarSoundIndicator.hidden = false
+  source.onended = () => {
+    trueCarSoundPlaying = false
+    trueCarSoundIndicator.hidden = true
+  }
+  source.start()
 }
 
 gunshotVolumeSetting.addEventListener('input', () => {
@@ -1544,8 +1671,123 @@ const direction = new THREE.Vector3()
 const playerHeight = 3.4
 const gravity = 18
 const jumpVelocity = 5.5
+const keyPickupDistance = 7
+const keyPickupWorldPosition = new THREE.Vector3()
+const keyPickupLookDirection = new THREE.Vector3()
+const keyPickupToPlayerDirection = new THREE.Vector3()
+const trueCarWorldPosition = new THREE.Vector3()
+const trueCarLookDirection = new THREE.Vector3()
+const trueCarToPlayerDirection = new THREE.Vector3()
+const trueCarIndicatorForward = new THREE.Vector3()
+const trueCarIndicatorRight = new THREE.Vector3()
+const trueCarIndicatorDirection = new THREE.Vector3()
+const trueCarBounds = new THREE.Box3()
+const trueCarClosestPoint = new THREE.Vector3()
+const driverSeatPosition = new THREE.Vector3()
+const driverSeatLookAt = new THREE.Vector3()
+const trueCarWorldQuaternion = new THREE.Quaternion()
+const driverSeatLeft = new THREE.Vector3(-0.75, 0, 0)
+const driverSeatBack = new THREE.Vector3(0, 0, 0.8)
+const driverSeatViewDistance = 10
+const driverSeatInitialView = new THREE.Vector3(-1, 0, 0)
+const trueCarInteractionDistance = 8
+const trueCarInteractionAngle = 70
 let verticalVelocity = 0
 let isGrounded = false
+
+function isKeyWithinPickupRange(): boolean {
+  if (!controls.isLocked || !keyPickupObject || keyPickupCollected || !keyPickupObject.visible) return false
+  keyPickupObject.getWorldPosition(keyPickupWorldPosition)
+  const horizontalDistance = Math.hypot(
+    camera.position.x - keyPickupWorldPosition.x,
+    camera.position.z - keyPickupWorldPosition.z,
+  )
+  if (horizontalDistance > keyPickupDistance) return false
+
+  camera.getWorldDirection(keyPickupLookDirection)
+  keyPickupToPlayerDirection.copy(keyPickupWorldPosition).sub(camera.position).normalize()
+  const lookDot = keyPickupLookDirection.dot(keyPickupToPlayerDirection)
+  return lookDot >= Math.cos(THREE.MathUtils.degToRad(32))
+}
+
+function updateKeyInteractionPrompt(): void {
+  keyPickupPrompt.hidden = !isKeyWithinPickupRange()
+  vehicleSearchHint.hidden = !keyPickupCollected
+  trueCarPrompt.hidden = !isTrueCarWithinInteractionRange()
+}
+
+function collectKeyPickup(): void {
+  if (!isKeyWithinPickupRange() || !keyPickupObject) return
+  keyPickupCollected = true
+  keyPickupObject.visible = false
+  keyEspObjects.forEach((outline) => { outline.visible = false })
+  updateKeyInteractionPrompt()
+}
+
+function isTrueCarWithinInteractionRange(): boolean {
+  if (!controls.isLocked || !keyPickupCollected || !trueCar || trueCarEntered) return false
+  trueCarBounds.setFromObject(trueCar)
+  trueCarBounds.getCenter(trueCarWorldPosition)
+  trueCarBounds.clampPoint(camera.position, trueCarClosestPoint)
+  const horizontalDistance = Math.hypot(camera.position.x - trueCarClosestPoint.x, camera.position.z - trueCarClosestPoint.z)
+  if (horizontalDistance > trueCarInteractionDistance) return false
+
+  camera.getWorldDirection(trueCarLookDirection)
+  trueCarLookDirection.y = 0
+  trueCarLookDirection.normalize()
+  trueCarToPlayerDirection.copy(trueCarClosestPoint).sub(camera.position)
+  trueCarToPlayerDirection.y = 0
+  trueCarToPlayerDirection.normalize()
+  return trueCarLookDirection.dot(trueCarToPlayerDirection) >= Math.cos(THREE.MathUtils.degToRad(trueCarInteractionAngle))
+}
+
+function enterTrueCar(): void {
+  if (!isTrueCarWithinInteractionRange() || !trueCar) return
+  trueCar.getWorldQuaternion(trueCarWorldQuaternion)
+  trueCarBounds.setFromObject(trueCar)
+  trueCarBounds.getCenter(driverSeatPosition)
+  driverSeatPosition.y = THREE.MathUtils.lerp(trueCarBounds.min.y, trueCarBounds.max.y, 0.65)
+  driverSeatPosition.add(driverSeatLeft.clone().applyQuaternion(trueCarWorldQuaternion))
+  driverSeatPosition.add(driverSeatBack.clone().applyQuaternion(trueCarWorldQuaternion))
+  driverSeatLookAt.copy(driverSeatInitialView).applyQuaternion(trueCarWorldQuaternion).multiplyScalar(driverSeatViewDistance).add(driverSeatPosition)
+  camera.position.copy(driverSeatPosition)
+  camera.lookAt(driverSeatLookAt)
+  camera.updateMatrixWorld(true)
+  trueCarEntered = true
+  trueCarPrompt.hidden = true
+  episodeFadeOverlay.classList.add('is-fading')
+}
+
+function updateTrueCarSeatPosition(): void {
+  if (!trueCarEntered || !trueCar) return
+  trueCar.getWorldQuaternion(trueCarWorldQuaternion)
+  trueCarBounds.setFromObject(trueCar)
+  trueCarBounds.getCenter(driverSeatPosition)
+  driverSeatPosition.y = THREE.MathUtils.lerp(trueCarBounds.min.y, trueCarBounds.max.y, 0.65)
+  driverSeatPosition.add(driverSeatLeft.clone().applyQuaternion(trueCarWorldQuaternion))
+  driverSeatPosition.add(driverSeatBack.clone().applyQuaternion(trueCarWorldQuaternion))
+  camera.position.copy(driverSeatPosition)
+}
+
+function updateTrueCarSoundIndicator(): void {
+  if (!trueCarSoundPlaying || !trueCar) return
+  trueCarBounds.setFromObject(trueCar)
+  trueCarBounds.getCenter(trueCarWorldPosition)
+  camera.getWorldDirection(trueCarIndicatorForward)
+  trueCarIndicatorForward.y = 0
+  trueCarIndicatorForward.normalize()
+  trueCarIndicatorRight.setFromMatrixColumn(camera.matrixWorld, 0)
+  trueCarIndicatorRight.y = 0
+  trueCarIndicatorRight.normalize()
+  trueCarIndicatorDirection.copy(trueCarWorldPosition).sub(camera.position)
+  trueCarIndicatorDirection.y = 0
+  trueCarIndicatorDirection.normalize()
+  const bearing = THREE.MathUtils.radToDeg(Math.atan2(
+    trueCarIndicatorDirection.dot(trueCarIndicatorRight),
+    trueCarIndicatorDirection.dot(trueCarIndicatorForward),
+  ))
+  trueCarSoundIndicator.style.setProperty('--true-car-bearing', `${bearing}deg`)
+}
 
 function lockPointer(): void {
   controls.lock(rawInputEnabled)
@@ -1593,6 +1835,15 @@ function handleKeyDown(event: KeyboardEvent): void {
     if (!settingsOverlay.classList.contains('is-open')) openMenu()
     else if (activeMenuView === 'home') closeMenu()
     else showMenuView('home')
+    return
+  }
+  if (event.code === 'KeyF') {
+    if (keyPickupCollected) enterTrueCar()
+    else collectKeyPickup()
+    return
+  }
+  if (event.code === 'KeyP') {
+    if (controls.isLocked && keyPickupCollected) playTrueCarSound()
     return
   }
   keys.add(event.code)
@@ -1794,16 +2045,12 @@ function updateInfiniteFloor(): void {
 
 function resolveParkingCollision(): void {
   if (!parkingBounds) return
-  if (isInStore) return
+  if (trueCarEntered) return
   isGrounded = false
   const playerRadius = 0.42
   camera.position.x = THREE.MathUtils.clamp(camera.position.x, parkingBounds.min.x + playerRadius, parkingBounds.max.x - playerRadius)
   camera.position.z = THREE.MathUtils.clamp(camera.position.z, parkingBounds.min.z + playerRadius, parkingBounds.max.z - playerRadius)
 
-  if (camera.position.x >= parkingBounds.max.x - 0.8 && Math.abs(camera.position.z - storeEntryPosition.z) < 6) {
-    camera.position.copy(storeEntryPosition)
-    isInStore = true
-  }
   if (parkingLotRoot && verticalVelocity <= 0) {
     parkingGroundRaycaster.set(new THREE.Vector3(camera.position.x, camera.position.y + 8, camera.position.z), new THREE.Vector3(0, -1, 0))
     const groundHit = parkingGroundRaycaster.intersectObject(parkingLotRoot, true).find((intersection) => intersection.point.y <= camera.position.y + 0.7)
@@ -2424,7 +2671,7 @@ function render(): void {
   updateProjectiles(performance.now() / 1000, delta)
 
   movement.set(0, 0, 0)
-  if (controls.isLocked) {
+  if (controls.isLocked && !trueCarEntered) {
     direction.set(Number(keys.has('KeyD')) - Number(keys.has('KeyA')), 0, Number(keys.has('KeyW')) - Number(keys.has('KeyS')))
     if (direction.lengthSq() > 0) {
       direction.normalize()
@@ -2441,8 +2688,11 @@ function render(): void {
       isGrounded = true
     }
   }
-  resolveParkingCollision()
+  if (trueCarEntered) updateTrueCarSeatPosition()
+  else resolveParkingCollision()
   updateInfiniteFloor()
+  updateKeyInteractionPrompt()
+  updateTrueCarSoundIndicator()
 
   const isMoving = controls.isLocked && direction.lengthSq() > 0
   const isAirborne = controls.isLocked && camera.position.y > playerHeight + 0.05
