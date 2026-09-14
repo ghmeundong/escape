@@ -462,15 +462,22 @@ scene.background = new THREE.Color('#0b0e12')
 scene.fog = new THREE.Fog('#0b0e12', 28, 600)
 let parkingBounds: THREE.Box3 | null = null
 let parkingLotRoot: THREE.Object3D | null = null
+let storeRoot: THREE.Object3D | null = null
+let storeBounds: THREE.Box3 | null = null
+let isInStore = false
 const parkingObstacles: THREE.Box3[] = []
 const parkingGroundRaycaster = new THREE.Raycaster()
+const parkingWallRaycaster = new THREE.Raycaster()
+const parkingProjectileRaycaster = new THREE.Raycaster()
 const parkingLotLoader = new FBXLoader()
+const storeSpawnPosition = new THREE.Vector3()
+const storeEntryPosition = new THREE.Vector3()
 const parkingLotUrl = new URL('./assets/parkingLot/parking.fbx', import.meta.url).href
 parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
   parkingLot.updateMatrixWorld(true)
   const bounds = new THREE.Box3().setFromObject(parkingLot)
   const size = bounds.getSize(new THREE.Vector3())
-  const scale = 160 / Math.max(size.x, size.z, 1)
+  const scale = 180 / Math.max(size.x, size.z, 1)
   parkingLot.scale.setScalar(scale)
   parkingLot.updateMatrixWorld(true)
   const scaledBounds = new THREE.Box3().setFromObject(parkingLot)
@@ -508,6 +515,140 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
   parkingBounds = new THREE.Box3().setFromObject(parkingLot)
   parkingLotRoot = parkingLot
   scene.add(parkingLot)
+
+  const carLoader = new FBXLoader()
+  const carUrl = new URL('./assets/car/vwkaferhlowered.fbx', import.meta.url).href
+  carLoader.load(carUrl, (car) => {
+    car.updateMatrixWorld(true)
+    const carBounds = new THREE.Box3().setFromObject(car)
+    const carSize = carBounds.getSize(new THREE.Vector3())
+    const carScale = 14.8 / Math.max(carSize.x, carSize.z, 1)
+    car.scale.setScalar(carScale)
+    car.updateMatrixWorld(true)
+
+    const carTemplateBounds = new THREE.Box3().setFromObject(car)
+    const slotMarker = parkingLot.getObjectByName('A')
+    const slotBounds = slotMarker ? new THREE.Box3().setFromObject(slotMarker) : new THREE.Box3()
+
+    const fixedBaseX = slotMarker ? slotBounds.min.x - 3 : 0
+    const secondRowBaseX = fixedBaseX - 42
+    const reversedRowBaseX = secondRowBaseX + 31
+    const carRows = [
+      {
+        x: fixedBaseX,
+        startZ: -60,
+        endZ: 79,
+        count: 15,
+        zOffsets: [0, 0.75, 1, 1.25, 1.5, 2.5, 3, 3.5, 4, 5, 4, 3, 2, 1, 0],
+        rotationY: 0,
+      },
+      {
+        x: secondRowBaseX,
+        startZ: -60,
+        endZ: 60,
+        count: 13,
+        zOffsets: [0, 0.75, 1, 1.25, 1.5, 2.5, 3, 3.5, 4, 5, 4, 3, 2, 1, 0],
+        rotationY: 0,
+      },
+      {
+        x: reversedRowBaseX,
+        startZ: -65,
+        endZ: 53,
+        count: 13,
+        zOffsets: [0, 0.75, 1, 1.25, 1.5, 2.5, 3, 3.5, 4, 5, 4, 3, 2, 1, 0],
+        rotationY: Math.PI,
+      },
+    ]
+
+    for (const [rowIndex, row] of carRows.entries()) {
+      const rowZStep = (row.endZ - row.startZ) / (row.count - 1)
+
+      for (let index = 0; index < row.count; index += 1) {
+        const parkedCar = rowIndex === 0 && index === 0 ? car : car.clone(true)
+        parkedCar.updateMatrixWorld(true)
+        const parkedCarBottomY = carTemplateBounds.min.y
+
+        if (slotMarker) {
+          parkedCar.position.x = row.x
+          parkedCar.position.z = row.startZ + index * rowZStep + (row.zOffsets[index] ?? 0)
+          parkedCar.position.y = -parkedCarBottomY + 0.01
+        } else {
+          const parkedCarCenter = carTemplateBounds.getCenter(new THREE.Vector3())
+          const parkingCenterX = (parkingBounds!.min.x + parkingBounds!.max.x) / 2
+          const parkingCenterZ = (parkingBounds!.min.z + parkingBounds!.max.z) / 2
+          parkedCar.position.x = parkingCenterX - parkedCarCenter.x
+          parkedCar.position.z = parkingCenterZ - parkedCarCenter.z + 8
+          parkedCar.position.y -= carTemplateBounds.min.y
+        }
+        parkedCar.rotation.set(0, row.rotationY, 0)
+        parkedCar.updateMatrixWorld(true)
+
+        parkedCar.traverse((object) => {
+          if (object instanceof THREE.Light) {
+            object.visible = false
+          }
+          if (object instanceof THREE.Mesh) {
+            const materials = Array.isArray(object.material) ? object.material : [object.material]
+            materials.forEach((material) => {
+              if (material) {
+                const meshMaterial = material as THREE.Material & { side?: THREE.Side }
+                meshMaterial.side = THREE.DoubleSide
+              }
+            })
+            object.castShadow = true
+            object.receiveShadow = true
+          }
+        })
+
+        const carWorldBounds = new THREE.Box3().setFromObject(parkedCar)
+        const carCollisionBounds = carWorldBounds.clone().expandByScalar(0.18)
+        parkingObstacles.push(carCollisionBounds)
+        scene.add(parkedCar)
+      }
+    }
+  }, undefined, (error) => {
+    console.error('Failed to load car model.', error)
+  })
+
+  const storeLoader = new FBXLoader()
+  const storeUrl = new URL('./assets/store/empty-store.fbx', import.meta.url).href
+  storeLoader.load(storeUrl, (store) => {
+    store.updateMatrixWorld(true)
+    const storeBoundsBox = new THREE.Box3().setFromObject(store)
+    const storeSize = storeBoundsBox.getSize(new THREE.Vector3())
+    const storeScale = 18 / Math.max(storeSize.x, storeSize.z, 1)
+    store.scale.setScalar(storeScale)
+    store.updateMatrixWorld(true)
+
+    const scaledStoreBounds = new THREE.Box3().setFromObject(store)
+    const storeCenter = scaledStoreBounds.getCenter(new THREE.Vector3())
+    const parkingCenterZ = (parkingBounds!.min.z + parkingBounds!.max.z) / 2
+
+    store.position.x = parkingBounds!.max.x + 20 - storeCenter.x
+    store.position.z = parkingCenterZ - storeCenter.z
+    store.position.y -= scaledStoreBounds.min.y
+    store.updateMatrixWorld(true)
+
+    store.traverse((object) => {
+      if (object instanceof THREE.Light) {
+        object.visible = false
+      }
+      if (object instanceof THREE.Mesh) {
+        object.castShadow = true
+        object.receiveShadow = true
+      }
+    })
+
+    storeRoot = store
+    storeBounds = new THREE.Box3().setFromObject(store)
+    storeSpawnPosition.copy(storeBounds.getCenter(new THREE.Vector3()))
+    storeSpawnPosition.y = playerHeight
+    const storeEntrySize = storeBounds.getSize(new THREE.Vector3())
+    storeEntryPosition.set(storeBounds.min.x + Math.min(1.2, storeEntrySize.x * 0.12), playerHeight, (storeBounds.min.z + storeBounds.max.z) * 0.5)
+    scene.add(store)
+  }, undefined, (error) => {
+    console.error('Failed to load store model.', error)
+  })
 }, undefined, (error) => {
   console.error('Failed to load parking lot model.', error)
 })
@@ -555,6 +696,8 @@ domeGridSetting.addEventListener('change', () => {
 domeGridColorSetting.addEventListener('input', () => {
   domeGridMaterial.color.set(domeGridColorSetting.value)
 })
+document.querySelector<HTMLElement>('[data-category="targets"]')?.remove()
+document.querySelector<HTMLElement>('[data-category-panel="targets"]')?.remove()
 const physicsWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
 physicsWorld.createCollider(RAPIER.ColliderDesc.cuboid(1000, 0.1, 1000).setTranslation(0, -0.1, 0))
 
@@ -674,19 +817,15 @@ weapon.rotation.copy(weaponRotation)
 camera.add(weapon)
 
 const muzzleLocalPosition = new THREE.Vector3()
-const gunshotSounds: Partial<Record<WeaponId, HTMLAudioElement>> = {
-  pistol: new Audio(new URL('./assets/sounds/freesound_community-9mm-pistol-shoot-short-reverb-7152.mp3', import.meta.url).href),
-}
+const pistolSoundUrl = new URL('./assets/sounds/freesound_community-9mm-pistol-shoot-short-reverb-7152.mp3', import.meta.url).href
+const gunshotAudioContext = new AudioContext()
+let gunshotBuffer: AudioBuffer | null = null
 let soundVolumeMultiplier = 0.5
-const gunshotReady: Partial<Record<WeaponId, boolean>> = { pistol: false }
-Object.entries(gunshotSounds).forEach(([weaponId, sound]) => {
-  sound.preload = 'auto'
-  sound.volume = soundVolumeMultiplier
-  sound.addEventListener('canplaythrough', () => {
-    gunshotReady[weaponId as WeaponId] = true
-  })
-  sound.load()
-})
+void fetch(pistolSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => { gunshotBuffer = buffer })
+  .catch((error: unknown) => console.error('Gunshot audio failed to load.', error))
 
 function resolveWeaponForMode(mode: ShootingMode): WeaponId {
   return 'pistol'
@@ -771,19 +910,26 @@ function applyWeaponSelection(): void {
 }
 
 function playGunshot(): void {
-  const gunshotSound = gunshotSounds[activeWeapon]
-  if (!gunshotSound || !hitSoundEnabled || !gunshotReady[activeWeapon] || gunshotSound.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
-  const shotSound = gunshotSound.cloneNode(true) as HTMLAudioElement
-  shotSound.volume = soundVolumeMultiplier
-  void shotSound.play().catch((error: unknown) => {
-    console.error('Gunshot audio playback failed.', error)
-  })
-  shotSound.addEventListener('ended', () => shotSound.remove())
+  if (!gunshotBuffer || !hitSoundEnabled) return
+  const startGunshot = (): void => {
+    const source = gunshotAudioContext.createBufferSource()
+    const gain = gunshotAudioContext.createGain()
+    source.buffer = gunshotBuffer
+    gain.gain.value = soundVolumeMultiplier
+    source.connect(gain)
+    gain.connect(gunshotAudioContext.destination)
+    source.start()
+  }
+  if (gunshotAudioContext.state === 'running') startGunshot()
+  else void gunshotAudioContext.resume().then(startGunshot).catch((error: unknown) => console.error('Gunshot audio playback failed.', error))
+}
+
+function warmGunshotAudio(): void {
+  if (gunshotAudioContext.state === 'suspended') void gunshotAudioContext.resume()
 }
 
 gunshotVolumeSetting.addEventListener('input', () => {
   soundVolumeMultiplier = Number(gunshotVolumeSetting.value) / 100
-  Object.values(gunshotSounds).forEach((sound) => { sound.volume = soundVolumeMultiplier })
   gunshotVolumeValue.value = `${gunshotVolumeSetting.value}%`
 })
 
@@ -924,6 +1070,7 @@ function updateScopeReticle(): void {
 function handlePointerDown(event: PointerEvent): void {
   if (event.button === 0 && controls.isLocked) {
     event.preventDefault()
+    warmGunshotAudio()
     leftButtonHeld = true
     if (activeWeapon === 'ak47') startAutomaticFire()
     else fireShot()
@@ -933,6 +1080,7 @@ function handlePointerDown(event: PointerEvent): void {
 function handleMouseDown(event: MouseEvent): void {
   if (event.button === 0 && controls.isLocked && !leftButtonHeld) {
     event.preventDefault()
+    warmGunshotAudio()
     leftButtonHeld = true
     if (activeWeapon === 'ak47') startAutomaticFire()
     else fireShot()
@@ -974,6 +1122,7 @@ function stopAutomaticFire(): void {
 
 document.addEventListener('pointerdown', handlePointerDown)
 document.addEventListener('mousedown', handleMouseDown)
+window.addEventListener('focus', warmGunshotAudio)
 document.addEventListener('pointerup', (event) => {
   handlePointerUp(event)
   if (event.button === 0) {
@@ -1009,7 +1158,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     stopAutomaticFire()
     releaseAim()
-  }
+  } else warmGunshotAudio()
 })
 canvas.addEventListener('contextmenu', (event) => event.preventDefault())
 scopeMagnificationSetting.addEventListener('change', () => {
@@ -1171,9 +1320,6 @@ floorColorSetting.addEventListener('input', () => {
 })
 gridColorSetting.addEventListener('input', () => {
   gridMaterials.forEach((material) => material.color.set(gridColorSetting.value))
-})
-targetColorSetting.addEventListener('input', () => {
-  targetMaterial.color.set(targetColorSetting.value)
 })
 crosshairStyleSetting.addEventListener('change', () => {
   const styleClass = {
@@ -1535,10 +1681,16 @@ function updateInfiniteFloor(): void {
 
 function resolveParkingCollision(): void {
   if (!parkingBounds) return
+  if (isInStore) return
   isGrounded = false
   const playerRadius = 0.42
   camera.position.x = THREE.MathUtils.clamp(camera.position.x, parkingBounds.min.x + playerRadius, parkingBounds.max.x - playerRadius)
   camera.position.z = THREE.MathUtils.clamp(camera.position.z, parkingBounds.min.z + playerRadius, parkingBounds.max.z - playerRadius)
+
+  if (camera.position.x >= parkingBounds.max.x - 0.8 && Math.abs(camera.position.z - storeEntryPosition.z) < 6) {
+    camera.position.copy(storeEntryPosition)
+    isInStore = true
+  }
   if (parkingLotRoot && verticalVelocity <= 0) {
     parkingGroundRaycaster.set(new THREE.Vector3(camera.position.x, camera.position.y + 8, camera.position.z), new THREE.Vector3(0, -1, 0))
     const groundHit = parkingGroundRaycaster.intersectObject(parkingLotRoot, true).find((intersection) => intersection.point.y <= camera.position.y + 0.7)
@@ -1554,7 +1706,7 @@ function resolveParkingCollision(): void {
   }
   const playerHeightBounds = new THREE.Vector2(camera.position.y - 0.8, camera.position.y + 0.8)
   for (const obstacle of parkingObstacles) {
-    if (playerHeightBounds.y <= obstacle.min.y || playerHeightBounds.x >= obstacle.max.y) continue
+    if (playerHeightBounds.x >= obstacle.max.y || playerHeightBounds.y <= obstacle.min.y) continue
     const overlapsX = camera.position.x > obstacle.min.x - playerRadius && camera.position.x < obstacle.max.x + playerRadius
     const overlapsZ = camera.position.z > obstacle.min.z - playerRadius && camera.position.z < obstacle.max.z + playerRadius
     if (!overlapsX || !overlapsZ) continue
@@ -1570,14 +1722,52 @@ function resolveParkingCollision(): void {
   }
 }
 
+function movePlayerWithCollision(distance: THREE.Vector3): void {
+  const distanceLength = distance.length()
+  const stepCount = Math.max(1, Math.ceil(distanceLength / 0.08))
+  const step = distance.clone().multiplyScalar(1 / stepCount)
+  for (let stepIndex = 0; stepIndex < stepCount; stepIndex += 1) {
+    const rightStep = new THREE.Vector3(step.x, 0, 0)
+    const forwardStep = new THREE.Vector3(0, 0, step.z)
+    if (!parkingLotRoot || !isParkingWallAhead(rightStep)) {
+      controls.moveRight(rightStep.x)
+      resolveParkingCollision()
+    }
+    if (!parkingLotRoot || !isParkingWallAhead(forwardStep)) {
+      controls.moveForward(forwardStep.z)
+      resolveParkingCollision()
+    }
+  }
+}
+
+function isParkingWallAhead(step: THREE.Vector3): boolean {
+  if (!parkingLotRoot) return false
+  const cameraForward = new THREE.Vector3()
+  const cameraRight = new THREE.Vector3()
+  camera.getWorldDirection(cameraForward)
+  cameraForward.y = 0
+  cameraForward.normalize()
+  cameraRight.setFromMatrixColumn(camera.matrixWorld, 0)
+  cameraRight.y = 0
+  cameraRight.normalize()
+  const horizontalStep = cameraRight.multiplyScalar(step.x).add(cameraForward.multiplyScalar(step.z))
+  const distance = horizontalStep.length()
+  if (distance === 0) return false
+  horizontalStep.normalize()
+  const sampleHeights = [camera.position.y - 1.8, camera.position.y - 0.8, camera.position.y + 0.2]
+  for (const sampleHeight of sampleHeights) {
+    parkingWallRaycaster.set(new THREE.Vector3(camera.position.x, sampleHeight, camera.position.z), horizontalStep)
+    const hit = parkingWallRaycaster.intersectObject(parkingLotRoot, true)[0]
+    if (hit && hit.distance <= distance + 0.18) return true
+  }
+  return false
+}
+
 const targetRadius = 0.72
-const targetGeometry = new THREE.SphereGeometry(targetRadius, 24, 16)
-const targetMaterial = new THREE.MeshBasicMaterial({ color: '#e33f32', fog: false })
-const target = new THREE.Mesh(targetGeometry, targetMaterial)
-target.position.set(0, 2.2, -7)
-const gridTargetA = new THREE.Mesh(targetGeometry, targetMaterial)
-const gridTargetB = new THREE.Mesh(targetGeometry, targetMaterial)
-const gridTargets = [target, gridTargetA, gridTargetB]
+const target = new THREE.Object3D()
+const gridTargetA = new THREE.Object3D()
+const gridTargetB = new THREE.Object3D()
+const gridTargets: THREE.Object3D[] = []
 let currentTargetScaleMultiplier = targetSizeMultiplier
 function isSnipingMode(mode: ShootingMode = shootingMode): boolean {
   return mode.endsWith('precision')
@@ -1880,6 +2070,7 @@ function spawnProjectile(direction: THREE.Vector3): void {
   physicsWorld.createCollider(RAPIER.ColliderDesc.ball(projectileRadius).setDensity(1).setRestitution(0), body)
   const mesh = new THREE.Mesh(projectileGeometry, projectileMaterial)
   mesh.position.copy(shotOrigin)
+  mesh.visible = false
   scene.add(mesh)
   const now = performance.now() / 1000
   projectiles.push({ body, mesh, bornAt: now, lastTrailAt: now, previousPosition: shotOrigin.clone() })
@@ -1904,25 +2095,23 @@ function updateProjectiles(now: number, delta: number): void {
       projectile.lastTrailAt = now
     }
     const projectilePosition = projectile.mesh.position
-    const sweptPath = new THREE.Line3(projectile.previousPosition, projectilePosition)
-    const hitTarget = gridTargets.find((candidate, targetIndex) => {
-      if (!candidate.visible) return false
-      const hitRadius = targetRadius * currentTargetScaleMultiplier + projectileRadius
-      const previousPosition = previousTargetPositions[targetIndex]
-      for (let sampleIndex = 0; sampleIndex <= 16; sampleIndex += 1) {
-        targetCollisionSample.copy(previousPosition).lerp(candidate.position, sampleIndex / 16)
-        const closestPoint = sweptPath.closestPointToPoint(targetCollisionSample, true, new THREE.Vector3())
-        if (closestPoint.distanceToSquared(targetCollisionSample) <= (hitRadius + 0.08) ** 2) return true
-      }
-      return false
-    })
-    projectile.previousPosition.copy(projectilePosition)
-    if (hitTarget) {
-      registerTargetHit(hitTarget)
+    const projectileTravel = projectilePosition.clone().sub(projectile.previousPosition)
+    const travelDistance = projectileTravel.length()
+    let parkingSurfaceHit: THREE.Intersection<THREE.Object3D> | undefined
+    if (parkingLotRoot && travelDistance > 0) {
+      parkingProjectileRaycaster.set(projectile.previousPosition, projectileTravel.normalize())
+      parkingProjectileRaycaster.far = travelDistance + projectileRadius
+      parkingSurfaceHit = parkingProjectileRaycaster.intersectObject(parkingLotRoot, true)[0]
     }
+    projectile.previousPosition.copy(projectilePosition)
     const hitFloor = translation.y <= projectileRadius + 0.01
-    if (hitFloor) createImpactSpark(projectilePosition)
-    if (hitTarget || hitFloor || now - projectile.bornAt > projectileLifetime) {
+    if (parkingSurfaceHit) {
+      const impactNormal = parkingSurfaceHit.face
+        ? parkingSurfaceHit.face.normal.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(parkingSurfaceHit.object.matrixWorld)).normalize()
+        : new THREE.Vector3(0, 1, 0)
+      createImpactSpark(parkingSurfaceHit.point, impactNormal, projectileTravel.normalize())
+    } else if (hitFloor) createImpactSpark(projectilePosition, new THREE.Vector3(0, 1, 0), projectileTravel.normalize())
+    if (parkingSurfaceHit || hitFloor || now - projectile.bornAt > projectileLifetime) {
       physicsWorld.removeRigidBody(projectile.body)
       scene.remove(projectile.mesh)
       projectiles.splice(index, 1)
@@ -1994,115 +2183,57 @@ function registerTargetHit(hitTarget: typeof target): void {
   }
 }
 
-function createTracer(position: THREE.Vector3): void {
-  const smokePosition = position.clone()
-  smokePosition.y = Math.max(smokePosition.y, 0.06)
-  const smokePuff = new THREE.Mesh(
-    new THREE.SphereGeometry(0.035 + Math.random() * 0.045, 8, 6),
-    new THREE.MeshBasicMaterial({ color: '#aeb4b5', transparent: true, opacity: 0.24, depthTest: true, depthWrite: true, fog: false }),
-  )
-  const smokeMaterial = smokePuff.material as THREE.MeshBasicMaterial
-  smokePuff.position.copy(smokePosition)
-  smokePuff.renderOrder = 0
-  scene.add(smokePuff)
-  gsap.to(smokePuff.position, { x: smokePosition.x + (Math.random() - 0.5) * 0.14, y: smokePosition.y + 0.12 + Math.random() * 0.18, z: smokePosition.z + (Math.random() - 0.5) * 0.14, duration: 0.45, ease: 'sine.out' })
-  gsap.to(smokePuff.scale, { x: 2.4, y: 2.4, z: 2.4, duration: 0.45, ease: 'sine.out' })
-  gsap.to(smokeMaterial, { opacity: 0, duration: 0.45, onComplete: () => {
-    scene.remove(smokePuff)
-    smokePuff.geometry.dispose()
-    smokeMaterial.dispose()
-  } })
+function createTracer(_position: THREE.Vector3): void {
+  return
 }
 
-function createHitscanTracer(start: THREE.Vector3, end: THREE.Vector3): void {
-  const direction = end.clone().sub(start)
-  const distance = direction.length()
-  direction.normalize()
-  const side = new THREE.Vector3().crossVectors(direction, cameraUp).normalize()
-  const vertical = new THREE.Vector3().crossVectors(side, direction).normalize()
-  const phase = Math.random() * Math.PI * 2
-  const distanceShakeScale = THREE.MathUtils.clamp(distance / 32, 0.15, 1)
-  const points = Array.from({ length: 34 }, (_, index) => {
-    const progress = index / 33
-    const point = end.clone().lerp(start, progress)
-    const muzzleFocusedSpread = progress * Math.exp(-progress * 8) * 8
-    const spread = muzzleFocusedSpread
-    const wave = Math.sin(progress * Math.PI * 7.5 + phase) * (0.018 + spread * 0.24) * distanceShakeScale
-    const flutter = Math.cos(progress * Math.PI * 12 + phase) * (0.012 + spread * 0.18) * distanceShakeScale
-    point.addScaledVector(side, wave).addScaledVector(vertical, flutter)
-    point.y = Math.max(point.y, 0.035)
-    return point
-  })
-  const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.45)
-  let tracerGeometry = new THREE.TubeGeometry(curve, 64, 0.018, 6, false)
-  const material = new THREE.MeshBasicMaterial({ color: '#c7c7c7', transparent: true, opacity: 0.72, depthTest: true, depthWrite: false, fog: false })
-  const tracer = new THREE.Mesh(tracerGeometry, material)
-  tracer.renderOrder = 9
-  scene.add(tracer)
-  gsap.to(material, {
-    opacity: 0,
-    duration: Math.min(4, 1.8 + distance * 0.02),
-    ease: 'power2.out',
-    onComplete: () => {
-      scene.remove(tracer)
-      tracerGeometry.dispose()
-      material.dispose()
-    },
-  })
-  const thickness = { radius: 0.018 }
-  gsap.to(thickness, {
-    radius: 0.03,
-    duration: Math.min(4, 1.8 + distance * 0.02),
-    ease: 'sine.out',
-    onUpdate: () => {
-      const nextGeometry = new THREE.TubeGeometry(curve, 64, thickness.radius, 6, false)
-      tracer.geometry = nextGeometry
-      tracerGeometry.dispose()
-      tracerGeometry = nextGeometry
-    },
-  })
+function createHitscanTracer(_start: THREE.Vector3, _end: THREE.Vector3): void {
+  return
 }
 
-function createLaserTracer(start: THREE.Vector3, end: THREE.Vector3): void {
-  const curve = new THREE.LineCurve3(start, end)
-  const geometry = new THREE.TubeGeometry(curve, 1, 0.012, 6, false)
-  const material = new THREE.MeshBasicMaterial({ color: '#fff4a3', transparent: true, opacity: 0.95, depthTest: true, depthWrite: false, fog: false })
-  const laser = new THREE.Mesh(geometry, material)
-  laser.renderOrder = 10
-  scene.add(laser)
-  gsap.to(material, {
-    opacity: 0,
-    duration: 0.09,
-    ease: 'power2.out',
-    onComplete: () => {
-      scene.remove(laser)
-      geometry.dispose()
-      material.dispose()
-    },
-  })
+function createLaserTracer(_start: THREE.Vector3, _end: THREE.Vector3): void {
+  return
 }
 
-function createImpactSpark(position: THREE.Vector3): void {
+function createImpactSpark(position: THREE.Vector3, normal: THREE.Vector3, incomingDirection?: THREE.Vector3): void {
   if (!hitVfxEnabled) return
-  for (let index = 0; index < 6; index += 1) {
+  const surfaceNormal = normal.clone().normalize()
+  const tangent = new THREE.Vector3().crossVectors(surfaceNormal, Math.abs(surfaceNormal.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).normalize()
+  const bitangent = new THREE.Vector3().crossVectors(surfaceNormal, tangent).normalize()
+  const incident = incomingDirection ? incomingDirection.clone().normalize() : new THREE.Vector3()
+  const reflection = incident.lengthSq() > 0
+    ? incident.clone().sub(surfaceNormal.clone().multiplyScalar(2 * incident.dot(surfaceNormal)))
+    : new THREE.Vector3()
+  const reflectedDirection = reflection.lengthSq() > 0 ? reflection.normalize() : surfaceNormal.clone()
+
+  for (let index = 0; index < 10; index += 1) {
     const spark = new THREE.Mesh(
-      new THREE.SphereGeometry(0.018, 5, 5),
+      new THREE.BoxGeometry(0.24, 0.008, 0.008),
       new THREE.MeshBasicMaterial({ color: index % 2 === 0 ? '#ffd166' : '#ff7a45', transparent: true, opacity: 0.95, fog: false }),
     )
     const sparkMaterial = spark.material as THREE.MeshBasicMaterial
-    const angle = (index / 6) * Math.PI * 2
-    const distance = 0.08 + Math.random() * 0.12
-    spark.position.copy(position)
+    const angle = (index / 10) * Math.PI * 2
+    const distance = 0.22 + Math.random() * 0.18
+    const jitter = tangent.clone().multiplyScalar((Math.random() - 0.5) * 0.55).addScaledVector(bitangent, (Math.random() - 0.5) * 0.55)
+    const spreadDirection = reflectedDirection.clone().add(jitter).normalize()
+    const spread = spreadDirection.multiplyScalar(distance)
+    const lift = surfaceNormal.clone().multiplyScalar(0.04 + Math.random() * 0.08)
+    const start = position.clone().addScaledVector(surfaceNormal, 0.02)
+    const end = position.clone().add(spread).add(lift)
+
+    spark.position.copy(start)
+    spark.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), end.clone().sub(start).normalize())
     scene.add(spark)
+
     gsap.to(spark.position, {
-      x: position.x + Math.cos(angle) * distance,
-      y: position.y + 0.04 + Math.random() * 0.1,
-      z: position.z + Math.sin(angle) * distance,
-      duration: 0.16 + Math.random() * 0.08,
-      ease: 'power2.out',
+      x: end.x,
+      y: end.y,
+      z: end.z,
+      duration: 0.06 + Math.random() * 0.03,
+      ease: 'power1.out',
     })
-    gsap.to(spark.scale, { x: 0.25, y: 0.25, z: 0.25, duration: 0.2, ease: 'power2.out' })
-    gsap.to(sparkMaterial, { opacity: 0, duration: 0.2, onComplete: () => {
+    gsap.to(spark.scale, { x: 1.8, y: 1, z: 1, duration: 0.08, ease: 'power1.out' })
+    gsap.to(sparkMaterial, { opacity: 0, duration: 0.12 + Math.random() * 0.04, onComplete: () => {
       scene.remove(spark)
       spark.geometry.dispose()
       sparkMaterial.dispose()
@@ -2193,11 +2324,6 @@ function render(): void {
   lastFrameAt = frameNow
   const delta = Math.min(clock.getDelta(), 0.05)
   const elapsed = clock.getElapsedTime()
-  snapshotTargetPositions()
-  if (shootingMode === 'gridshot' || shootingMode === 'gridshotprecision') updateGridLayout()
-  if (shootingMode === 'reflexshot' || shootingMode === 'reflexshotprecision') updateReflexTarget(elapsed)
-  if (target.visible) updateTargetMovement(elapsed)
-  if (shootingMode === 'strafetrack' || shootingMode === 'spheretrack' || shootingMode === 'fallingtrack') updateTrackingTarget(delta, elapsed)
   updateProjectiles(performance.now() / 1000, delta)
 
   movement.set(0, 0, 0)
@@ -2205,9 +2331,8 @@ function render(): void {
     direction.set(Number(keys.has('KeyD')) - Number(keys.has('KeyA')), 0, Number(keys.has('KeyW')) - Number(keys.has('KeyS')))
     if (direction.lengthSq() > 0) {
       direction.normalize()
-      movement.copy(direction).multiplyScalar(4.5 * delta)
-      controls.moveRight(movement.x)
-      controls.moveForward(movement.z)
+      movement.copy(direction).multiplyScalar(10 * delta)
+      movePlayerWithCollision(movement)
     }
 
     isGrounded = false
