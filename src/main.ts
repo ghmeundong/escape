@@ -272,6 +272,15 @@ hideAllCarsToggleLabel.className = 'toggle-row'
 hideAllCarsToggleLabel.textContent = 'HIDE ALL CARS '
 hideAllCarsToggleLabel.append(hideAllCarsSetting)
 displayCategoryPanel?.append(hideAllCarsToggleLabel)
+const keyEspSetting = document.createElement('input')
+keyEspSetting.id = 'key-esp-setting'
+keyEspSetting.type = 'checkbox'
+keyEspSetting.checked = true
+const keyEspToggleLabel = document.createElement('label')
+keyEspToggleLabel.className = 'toggle-row'
+keyEspToggleLabel.textContent = 'KEY ESP OUTLINE '
+keyEspToggleLabel.append(keyEspSetting)
+displayCategoryPanel?.append(keyEspToggleLabel)
 const crosshairOutlineColorSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-color-setting')!
 const crosshairOutlineThicknessSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-thickness-setting')!
 const crosshairOutlineThicknessValue = document.querySelector<HTMLOutputElement>('#crosshair-outline-thickness-value')!
@@ -379,6 +388,7 @@ let isInStore = false
 const parkingObstacles: THREE.Box3[] = []
 const parkingObstacleCellSize = 8
 const parkingObstacleCells = new Map<string, THREE.Box3[]>()
+const keyEspObjects: THREE.Object3D[] = []
 
 function addParkingObstacle(bounds: THREE.Box3): void {
   parkingObstacles.push(bounds)
@@ -786,8 +796,10 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
       keyModel.position.copy(keySpawnPosition)
       keyModel.updateMatrixWorld(true)
 
+      const keyMeshes: THREE.Mesh[] = []
       keyModel.traverse((object) => {
         if (object instanceof THREE.Mesh) {
+          keyMeshes.push(object)
           object.castShadow = false
           object.receiveShadow = false
 
@@ -805,6 +817,46 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
           })
         }
       })
+
+      const keyOutlineMaterial = new THREE.LineBasicMaterial({
+        color: '#ffcf52',
+        transparent: true,
+        opacity: 1,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+        fog: false,
+        toneMapped: false,
+      })
+      const keyOuterOutlineMaterial = new THREE.LineBasicMaterial({
+        color: '#ff7a18',
+        transparent: true,
+        opacity: 0.65,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+        fog: false,
+        toneMapped: false,
+      })
+
+      for (const mesh of keyMeshes) {
+        const outline = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 18), keyOutlineMaterial)
+        outline.position.copy(mesh.position)
+        outline.rotation.copy(mesh.rotation)
+        outline.scale.copy(mesh.scale)
+        outline.renderOrder = 1000
+        keyModel.add(outline)
+        keyEspObjects.push(outline)
+
+        const outerOutline = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 30), keyOuterOutlineMaterial)
+        outerOutline.position.copy(mesh.position)
+        outerOutline.rotation.copy(mesh.rotation)
+        outerOutline.scale.set(mesh.scale.x * 1.035, mesh.scale.y * 1.035, mesh.scale.z * 1.035)
+        outerOutline.renderOrder = 999
+        keyModel.add(outerOutline)
+        keyEspObjects.push(outerOutline)
+      }
+      keyEspObjects.forEach((outline) => { outline.visible = keyEspSetting.checked })
 
       scene.add(keyModel)
     }, undefined, (error) => {
@@ -864,6 +916,11 @@ domeGridColorSetting.addEventListener('input', () => {
 hideAllCarsSetting.addEventListener('change', () => {
   parkedCars.forEach((car) => {
     car.visible = !hideAllCarsSetting.checked
+  })
+})
+keyEspSetting.addEventListener('change', () => {
+  keyEspObjects.forEach((outline) => {
+    outline.visible = keyEspSetting.checked
   })
 })
 document.querySelector<HTMLElement>('[data-category="targets"]')?.remove()
