@@ -1690,8 +1690,8 @@ const driverSeatLeft = new THREE.Vector3(-0.75, 0, 0)
 const driverSeatBack = new THREE.Vector3(0, 0, 0.8)
 const driverSeatViewDistance = 10
 const driverSeatInitialView = new THREE.Vector3(-1, 0, 0)
-const trueCarInteractionDistance = 8
-const trueCarInteractionAngle = 70
+const trueCarInteractionDistance = 4.5
+const trueCarInteractionAngle = 45
 let verticalVelocity = 0
 let isGrounded = false
 
