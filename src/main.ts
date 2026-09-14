@@ -263,6 +263,15 @@ domeGridColorLabel.textContent = 'DOME GRID COLOR '
 domeGridColorLabel.append(domeGridColorSetting)
 domeGridPanel.insertBefore(domeGridToggleLabel, floorColorSetting.closest('label'))
 domeGridPanel.insertBefore(domeGridColorLabel, floorColorSetting.closest('label'))
+const hideAllCarsSetting = document.createElement('input')
+hideAllCarsSetting.id = 'hide-all-cars-setting'
+hideAllCarsSetting.type = 'checkbox'
+hideAllCarsSetting.checked = false
+const hideAllCarsToggleLabel = document.createElement('label')
+hideAllCarsToggleLabel.className = 'toggle-row'
+hideAllCarsToggleLabel.textContent = 'HIDE ALL CARS '
+hideAllCarsToggleLabel.append(hideAllCarsSetting)
+displayCategoryPanel?.append(hideAllCarsToggleLabel)
 const crosshairOutlineColorSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-color-setting')!
 const crosshairOutlineThicknessSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-thickness-setting')!
 const crosshairOutlineThicknessValue = document.querySelector<HTMLOutputElement>('#crosshair-outline-thickness-value')!
@@ -413,12 +422,53 @@ function getNearbyParkingObstacles(): THREE.Box3[] {
   return nearbyObstacles
 }
 
+function overlapsParkingObstacle(x: number, z: number, padding = 0.45): boolean {
+  for (const obstacle of parkingObstacles) {
+    const overlapsX = x > obstacle.min.x - padding && x < obstacle.max.x + padding
+    const overlapsZ = z > obstacle.min.z - padding && z < obstacle.max.z + padding
+    if (overlapsX && overlapsZ) return true
+  }
+  return false
+}
+
+function getRandomKeySpawnPosition(): THREE.Vector3 | null {
+  if (!parkingBounds || !parkingLotRoot) return null
+
+  const bounds = parkingBounds
+  const minX = bounds.min.x + 2
+  const maxX = bounds.max.x - 2
+  const minZ = bounds.min.z + 2
+  const maxZ = bounds.max.z - 2
+
+  for (let attempt = 0; attempt < 250; attempt += 1) {
+    const x = THREE.MathUtils.randFloat(minX, maxX)
+    const z = THREE.MathUtils.randFloat(minZ, maxZ)
+
+    const nearStoreEntry = Math.abs(x - storeEntryPosition.x) < 3 && Math.abs(z - storeEntryPosition.z) < 3
+    if (nearStoreEntry) continue
+    if (overlapsParkingObstacle(x, z, 0.85)) continue
+
+    parkingGroundRaycaster.set(new THREE.Vector3(x, 30, z), new THREE.Vector3(0, -1, 0))
+    const hits = parkingGroundRaycaster.intersectObject(parkingLotRoot, true)
+    const hit = hits.find((intersection) => intersection.point.y >= bounds.min.y - 0.25)
+    if (!hit || !hit.face) continue
+
+    const worldFaceNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
+    if (worldFaceNormal.y < 0.92) continue
+
+    return new THREE.Vector3(x, hit.point.y + 0.02, z)
+  }
+
+  return null
+}
+
 const parkingGroundRaycaster = new THREE.Raycaster()
 const parkingWallRaycaster = new THREE.Raycaster()
 const parkingProjectileRaycaster = new THREE.Raycaster()
 const parkingLotLoader = new FBXLoader()
 const storeSpawnPosition = new THREE.Vector3()
 const storeEntryPosition = new THREE.Vector3()
+const keyPickupPosition = new THREE.Vector3()
 const parkingLotUrl = new URL('./assets/parkingLot/parking.fbx', import.meta.url).href
 parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
   parkingLot.updateMatrixWorld(true)
@@ -579,6 +629,7 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
         const carWorldBounds = new THREE.Box3().setFromObject(parkedCar)
         const carCollisionBounds = carWorldBounds.clone().expandByScalar(0.04)
         addParkingObstacle(carCollisionBounds)
+        parkedCar.visible = !hideAllCarsSetting.checked
         parkedCars.push(parkedCar)
         scene.add(parkedCar)
       }
@@ -586,6 +637,108 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
   }, undefined, (error) => {
     console.error('Failed to load car model.', error)
   })
+
+  function createKeyPickup(): THREE.Group {
+    const keyGroup = new THREE.Group()
+
+    const glowCanvas = document.createElement('canvas')
+    glowCanvas.width = 128
+    glowCanvas.height = 128
+    const glowContext = glowCanvas.getContext('2d')
+    const glowTexture = glowContext ? (() => {
+      const gradient = glowContext.createRadialGradient(64, 64, 8, 64, 64, 64)
+      gradient.addColorStop(0, 'rgba(255,247,200,1)')
+      gradient.addColorStop(0.18, 'rgba(255,214,105,0.95)')
+      gradient.addColorStop(0.45, 'rgba(255,166,70,0.45)')
+      gradient.addColorStop(1, 'rgba(255,166,70,0)')
+      glowContext.fillStyle = gradient
+      glowContext.fillRect(0, 0, glowCanvas.width, glowCanvas.height)
+      const texture = new THREE.CanvasTexture(glowCanvas)
+      texture.needsUpdate = true
+      return texture
+    })() : null
+
+    const keyMaterial = new THREE.MeshStandardMaterial({
+      color: '#d6cdb9',
+      metalness: 0.85,
+      roughness: 0.28,
+      emissive: '#ffcc66',
+      emissiveIntensity: 2.5,
+      fog: false,
+      toneMapped: false,
+    })
+
+    const keyOutlineMaterial = new THREE.LineBasicMaterial({
+      color: '#ffd36b',
+      transparent: true,
+      opacity: 1,
+      depthTest: false,
+      depthWrite: false,
+    })
+
+    const addOutline = (mesh: THREE.Mesh) => {
+      const outline = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), keyOutlineMaterial)
+      outline.position.copy(mesh.position)
+      outline.rotation.copy(mesh.rotation)
+      outline.scale.copy(mesh.scale)
+      outline.renderOrder = 3
+      keyGroup.add(outline)
+    }
+
+    const bow = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.028, 10, 28), keyMaterial)
+    bow.rotation.x = Math.PI / 2
+    bow.position.y = 0.06
+    keyGroup.add(bow)
+    addOutline(bow)
+
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.03, 0.04), keyMaterial)
+    shaft.position.set(0.34, 0.04, 0)
+    keyGroup.add(shaft)
+    addOutline(shaft)
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.05), keyMaterial)
+    head.position.set(0.73, 0.04, 0)
+    keyGroup.add(head)
+    addOutline(head)
+
+    const toothMaterial = new THREE.MeshStandardMaterial({
+      color: '#f0e5d2',
+      metalness: 0.9,
+      roughness: 0.22,
+      emissive: '#ffbf5a',
+      emissiveIntensity: 1.1,
+      fog: false,
+      toneMapped: false,
+    })
+    for (let index = 0; index < 4; index += 1) {
+      const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.03), toothMaterial)
+      tooth.position.set(0.56 + index * 0.06, 0.03, 0)
+      keyGroup.add(tooth)
+      addOutline(tooth)
+    }
+
+    const keyGlow = new THREE.PointLight('#ffcc66', 5, 8, 2)
+    keyGlow.position.set(0.25, 0.28, 0)
+    keyGroup.add(keyGlow)
+
+    const keyHalo = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: glowTexture ?? undefined,
+        color: '#ffbc5c',
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: false,
+      }),
+    )
+    keyHalo.position.set(0.22, 0.18, 0)
+    keyHalo.scale.set(1.6, 1.0, 1)
+    keyGroup.add(keyHalo)
+
+    keyGroup.rotation.y = Math.PI / 2
+    return keyGroup
+  }
 
   const storeLoader = new FBXLoader()
   const storeUrl = new URL('./assets/store/empty-store.fbx', import.meta.url).href
@@ -622,6 +775,41 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
     storeSpawnPosition.y = playerHeight
     const storeEntrySize = storeBounds.getSize(new THREE.Vector3())
     storeEntryPosition.set(storeBounds.min.x + Math.min(1.2, storeEntrySize.x * 0.12), playerHeight, (storeBounds.min.z + storeBounds.max.z) * 0.5)
+
+    const keyLoader = new FBXLoader()
+    const keyUrl = new URL('./assets/key/Key.fbx', import.meta.url).href
+    keyLoader.load(keyUrl, (keyModel) => {
+      keyModel.scale.setScalar(0.55)
+      keyModel.rotation.x = Math.PI / 2
+
+      const keySpawnPosition = getRandomKeySpawnPosition() ?? new THREE.Vector3(storeEntryPosition.x - 1.8, 0.02, storeEntryPosition.z)
+      keyModel.position.copy(keySpawnPosition)
+      keyModel.updateMatrixWorld(true)
+
+      keyModel.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.castShadow = false
+          object.receiveShadow = false
+
+          const materials = Array.isArray(object.material) ? object.material : [object.material]
+
+          materials.forEach((material) => {
+            if (material instanceof THREE.MeshStandardMaterial) {
+              material.color = new THREE.Color('#1f2328')
+              material.metalness = 0.95
+              material.roughness = 0.32
+            }
+            if (material instanceof THREE.MeshPhongMaterial || material instanceof THREE.MeshLambertMaterial) {
+              material.color = new THREE.Color('#1f2328')
+            }
+          })
+        }
+      })
+
+      scene.add(keyModel)
+    }, undefined, (error) => {
+      console.error('Failed to load key pickup model.', error)
+    })
     scene.add(store)
   }, undefined, (error) => {
     console.error('Failed to load store model.', error)
@@ -672,6 +860,11 @@ domeGridSetting.addEventListener('change', () => {
 })
 domeGridColorSetting.addEventListener('input', () => {
   domeGridMaterial.color.set(domeGridColorSetting.value)
+})
+hideAllCarsSetting.addEventListener('change', () => {
+  parkedCars.forEach((car) => {
+    car.visible = !hideAllCarsSetting.checked
+  })
 })
 document.querySelector<HTMLElement>('[data-category="targets"]')?.remove()
 document.querySelector<HTMLElement>('[data-category-panel="targets"]')?.remove()
