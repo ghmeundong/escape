@@ -20,9 +20,6 @@ if (window.electronAPI) document.documentElement.classList.add('electron-app')
 const app = document.querySelector<HTMLDivElement>('#app')!
 app.innerHTML = `
   <main class="escape-app">
-    <header class="topbar">
-      <div class="brand"><span class="brand-mark">+</span><span>ESCAPE</span></div>
-    </header>
     <section class="range-shell">
       <div class="range" aria-label="Escape parking environment">
       <canvas id="range-canvas" aria-label="Escape game view"></canvas>
@@ -398,12 +395,18 @@ function getNearbyParkingObstacles(): THREE.Box3[] {
   const minCellZ = Math.floor((camera.position.z - 1.2) / parkingObstacleCellSize)
   const maxCellZ = Math.floor((camera.position.z + 1.2) / parkingObstacleCellSize)
   const nearbyObstacles: THREE.Box3[] = []
+  const uniqueObstacles = new Set<THREE.Box3>()
 
   for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
     for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
       const key = `${cellX}:${cellZ}`
       const cellObstacles = parkingObstacleCells.get(key)
-      if (cellObstacles) nearbyObstacles.push(...cellObstacles)
+      if (!cellObstacles) continue
+      for (const obstacle of cellObstacles) {
+        if (uniqueObstacles.has(obstacle)) continue
+        uniqueObstacles.add(obstacle)
+        nearbyObstacles.push(obstacle)
+      }
     }
   }
 
@@ -520,15 +523,15 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
         startZ: 0,
         endZ: 60,
         count: 5,
-        zOffsets: [0, 0.75, 1, 1.25, 1.5, 2.5, 3, 3.5, 4, 5, 4, 3, 2, 1, 0],
+        zOffsets: [0, 0, 0, 0, 0],
         rotationY: fifthRowRotationY,
       },
       {
         x: sixthRowBaseX,
         startZ: 0,
-        endZ: 60,
-        count: 5,
-        zOffsets: [0, 0.75, 1, 1.25, 1.5, 2.5, 3, 3.5, 4, 5, 4, 3, 2, 1, 0],
+        endZ: 79,
+        count: 6,
+        zOffsets: [0, 0, 0, 0, 0, 0],
         rotationY: sixthRowRotationY,
       },
     ]
@@ -574,8 +577,9 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
         })
 
         const carWorldBounds = new THREE.Box3().setFromObject(parkedCar)
-        const carCollisionBounds = carWorldBounds.clone().expandByScalar(0.18)
+        const carCollisionBounds = carWorldBounds.clone().expandByScalar(0.04)
         addParkingObstacle(carCollisionBounds)
+        parkedCars.push(parkedCar)
         scene.add(parkedCar)
       }
     }
@@ -1417,7 +1421,7 @@ controls.addEventListener('lock', handleLockChange)
 controls.addEventListener('unlock', handleLockChange)
 
 function getRenderPixelRatio(): number {
-  return Math.min(window.devicePixelRatio * resolutionScale, 2)
+  return Math.min(window.devicePixelRatio * resolutionScale, 1.5)
 }
 
 let renderer = new THREE.WebGLRenderer({ canvas, antialias: antialiasingSetting.checked, powerPreference: 'high-performance' })
@@ -1910,6 +1914,7 @@ type Projectile = {
 }
 
 const projectiles: Projectile[] = []
+const parkedCars: THREE.Object3D[] = []
 const projectileMaterial = new THREE.MeshBasicMaterial({ color: '#fff1a3', fog: false })
 const projectileGeometry = new THREE.SphereGeometry(0.035, 8, 8)
 const projectileRadius = 0.035
@@ -1955,10 +1960,13 @@ function updateProjectiles(now: number, delta: number): void {
     const projectileTravel = projectilePosition.clone().sub(projectile.previousPosition)
     const travelDistance = projectileTravel.length()
     let parkingSurfaceHit: THREE.Intersection<THREE.Object3D> | undefined
-    if (parkingLotRoot && travelDistance > 0) {
+    if (travelDistance > 0) {
       parkingProjectileRaycaster.set(projectile.previousPosition, projectileTravel.normalize())
       parkingProjectileRaycaster.far = travelDistance + projectileRadius
-      parkingSurfaceHit = parkingProjectileRaycaster.intersectObject(parkingLotRoot, true)[0]
+      const parkingLotHit = parkingLotRoot ? parkingProjectileRaycaster.intersectObject(parkingLotRoot, true)[0] : undefined
+      const parkedCarHit = parkedCars.length > 0 ? parkingProjectileRaycaster.intersectObjects(parkedCars, true)[0] : undefined
+      const candidateHits = [parkingLotHit, parkedCarHit].filter((hit): hit is THREE.Intersection<THREE.Object3D> => Boolean(hit))
+      parkingSurfaceHit = candidateHits.sort((a, b) => a.distance - b.distance)[0]
     }
     projectile.previousPosition.copy(projectilePosition)
     const hitFloor = translation.y <= projectileRadius + 0.01

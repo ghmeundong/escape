@@ -43,7 +43,7 @@ button { font: inherit; }
 .brand-mark { color: #ee654c; font-size: 24px; line-height: 0; }
 .session-status { display: flex; gap: 8px; align-items: center; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #7bcf8b; box-shadow: 0 0 10px #7bcf8b; }
-.range-shell { position: absolute; inset: 72px 52px 52px; display: grid; place-items: center; }
+.range-shell { position: absolute; inset: 52px 52px 52px; display: grid; place-items: center; }
 .range { position: relative; flex: none; width: min(100%, calc((100svh - 124px) * 16 / 9)); height: min(100%, calc((100vw - 104px) * 9 / 16)); aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid #293139; background: #11171d; }
 .electron-app, .electron-app body, .electron-app #app, .electron-app .escape-app { width: 100%; height: 100%; }
 .electron-app body { overflow: hidden; }
