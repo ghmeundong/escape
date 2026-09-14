@@ -271,16 +271,19 @@ const hideAllCarsToggleLabel = document.createElement('label')
 hideAllCarsToggleLabel.className = 'toggle-row'
 hideAllCarsToggleLabel.textContent = 'HIDE ALL CARS '
 hideAllCarsToggleLabel.append(hideAllCarsSetting)
-displayCategoryPanel?.append(hideAllCarsToggleLabel)
 const keyEspSetting = document.createElement('input')
 keyEspSetting.id = 'key-esp-setting'
 keyEspSetting.type = 'checkbox'
-keyEspSetting.checked = true
+keyEspSetting.checked = false
 const keyEspToggleLabel = document.createElement('label')
 keyEspToggleLabel.className = 'toggle-row'
 keyEspToggleLabel.textContent = 'KEY ESP OUTLINE '
 keyEspToggleLabel.append(keyEspSetting)
-displayCategoryPanel?.append(keyEspToggleLabel)
+const developerTestGroup = document.createElement('div')
+developerTestGroup.className = 'developer-test-group'
+developerTestGroup.innerHTML = '<h2>DEVELOPER TEST OPTIONS</h2>'
+developerTestGroup.append(hideAllCarsToggleLabel, keyEspToggleLabel)
+displayCategoryPanel?.append(developerTestGroup)
 const crosshairOutlineColorSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-color-setting')!
 const crosshairOutlineThicknessSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-thickness-setting')!
 const crosshairOutlineThicknessValue = document.querySelector<HTMLOutputElement>('#crosshair-outline-thickness-value')!
