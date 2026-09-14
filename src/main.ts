@@ -49,7 +49,7 @@ app.innerHTML = `
             <nav class="settings-nav" aria-label="Settings categories"><button class="settings-category is-active" data-category="display" type="button">DISPLAY &amp; GRAPHICS</button><button class="settings-category" data-category="weapon" type="button">WEAPON &amp; BALLISTICS</button><button class="settings-category" data-category="controls" type="button">MOUSE &amp; CONTROLS</button><button class="settings-category" data-category="crosshair" type="button">CROSSHAIR</button><button class="settings-category" data-category="targets" type="button">TARGETS &amp; ENVIRONMENT</button><button class="settings-category" data-category="sound" type="button">SOUND</button></nav>
             <div class="settings-category-content">
               <section class="settings-group settings-panel-group is-visible" data-category-panel="display"><h2>DISPLAY &amp; GRAPHICS</h2><label>RENDER DISTANCE <output id="render-distance-value">600</output><input id="render-distance-setting" type="range" min="100" max="600" step="10" value="600"></label><label>FOV <output id="fov-value">65</output><input id="fov-setting" type="range" min="45" max="103" step="1" value="65"></label><label>RESOLUTION SCALE <output id="resolution-scale-value">100%</output><input id="resolution-scale-setting" type="range" min="50" max="150" step="5" value="100"></label><label>MAX FPS <select id="max-fps-setting"><option value="0">UNLIMITED</option><option value="60">60</option><option value="144">144</option><option value="240">240</option></select></label><label class="toggle-row">ANTI-ALIASING <input id="antialiasing-setting" type="checkbox" checked></label></section>
-              <section class="settings-group settings-panel-group" data-category-panel="weapon"><h2>WEAPON &amp; BALLISTICS</h2><div class="weapon-preview"><h2>CURRENT WEAPON</h2><canvas id="weapon-preview-canvas" aria-label="Current weapon preview"></canvas><strong id="current-weapon-name">COLT 1911</strong></div><label>WEAPON <select id="weapon-setting"><option value="auto">AUTO BY MODE</option><option value="pistol">PISTOL</option><option value="ak47">AK47</option></select></label><label>HITSCAN / PROJECTILE <select id="fire-mode-setting"><option value="projectile">PROJECTILE</option><option value="hitscan">HITSCAN</option></select></label><label>BULLET SPEED <output id="bullet-speed-value">253</output><input id="bullet-speed-setting" type="range" min="50" max="500" step="1" value="253"></label><label>RECOIL <output id="recoil-value">50%</output><input id="recoil-setting" type="range" min="0" max="100" value="50"></label><label>SPREAD <output id="spread-value">50%</output><input id="spread-setting" type="range" min="0" max="150" value="50"></label><label>MOVEMENT SPREAD <output id="movement-spread-value">225%</output><input id="movement-spread-setting" type="range" min="100" max="500" value="225"></label><label>AIM JUMP SPREAD <output id="aiming-jump-spread-value">550%</output><input id="aiming-jump-spread-setting" type="range" min="100" max="800" value="550"></label><label>HIPFIRE JUMP SPREAD <output id="hipfire-jump-spread-value">450%</output><input id="hipfire-jump-spread-setting" type="range" min="100" max="800" value="450"></label><label>BULLET DROP <output id="bullet-drop-value">100%</output><input id="bullet-drop-setting" type="range" min="0" max="200" value="100"></label></section>
+              <section class="settings-group settings-panel-group" data-category-panel="weapon"><h2>WEAPON &amp; BALLISTICS</h2><div class="weapon-preview"><h2>CURRENT WEAPON</h2><canvas id="weapon-preview-canvas" aria-label="Current weapon preview"></canvas><strong id="current-weapon-name">COLT 1911</strong></div><label>WEAPON <select id="weapon-setting"><option value="pistol">PISTOL</option></select></label><label>HITSCAN / PROJECTILE <select id="fire-mode-setting"><option value="projectile">PROJECTILE</option><option value="hitscan">HITSCAN</option></select></label><label>BULLET SPEED <output id="bullet-speed-value">253</output><input id="bullet-speed-setting" type="range" min="50" max="500" step="1" value="253"></label><label>RECOIL <output id="recoil-value">50%</output><input id="recoil-setting" type="range" min="0" max="100" value="50"></label><label>SPREAD <output id="spread-value">50%</output><input id="spread-setting" type="range" min="0" max="150" value="50"></label><label>MOVEMENT SPREAD <output id="movement-spread-value">225%</output><input id="movement-spread-setting" type="range" min="100" max="500" value="225"></label><label>AIM JUMP SPREAD <output id="aiming-jump-spread-value">550%</output><input id="aiming-jump-spread-setting" type="range" min="100" max="800" value="550"></label><label>HIPFIRE JUMP SPREAD <output id="hipfire-jump-spread-value">450%</output><input id="hipfire-jump-spread-setting" type="range" min="100" max="800" value="450"></label><label>BULLET DROP <output id="bullet-drop-value">100%</output><input id="bullet-drop-setting" type="range" min="0" max="200" value="100"></label></section>
               <section class="settings-group settings-panel-group" data-category-panel="controls"><h2>MOUSE &amp; CONTROLS</h2><label>SENSITIVITY <output id="settings-sensitivity-value">0.70</output><input id="settings-sensitivity" type="range" min="0.2" max="1.5" step="0.05" value="0.7"></label><label>DPI MULTIPLIER <output id="dpi-value">800</output><input id="dpi-setting" type="range" min="100" max="3200" step="100" value="800"></label><label>ADS RATIO <output id="ads-ratio-value">1.00</output><input id="ads-ratio-setting" type="range" min="0.1" max="2" step="0.05" value="1"></label><label>ADS FOV <output id="ads-fov-value">48</output><input id="ads-fov-setting" type="range" min="30" max="65" step="1" value="48"></label><label class="toggle-row">RAW INPUT <input id="raw-input-setting" type="checkbox" checked></label></section>
               <section class="settings-group settings-panel-group" data-category-panel="crosshair"><h2>CROSSHAIR</h2><label>STYLE <select id="crosshair-style-setting"><option>DOT + CROSS</option><option>DOT</option><option>CROSS</option><option>CIRCLE</option></select></label><label>COLOR <input id="crosshair-color-setting" type="color" value="#ffffff"></label><label>GAP <output id="crosshair-gap-value">14px</output><input id="crosshair-gap-setting" type="range" min="0" max="30" value="14"></label><label>LENGTH <output id="crosshair-length-value">8px</output><input id="crosshair-length-setting" type="range" min="2" max="24" value="8"></label><label>THICKNESS <output id="crosshair-thickness-value">1px</output><input id="crosshair-thickness-setting" type="range" min="1" max="5" value="1"></label><label>DOT SIZE <output id="crosshair-dot-size-value">5px</output><input id="crosshair-dot-size-setting" type="range" min="1" max="12" value="5"></label><label>CIRCLE SIZE <output id="crosshair-circle-size-value">30px</output><input id="crosshair-circle-size-setting" type="range" min="8" max="58" value="30"></label><label>OPACITY <output id="crosshair-opacity-value">90%</output><input id="crosshair-opacity-setting" type="range" min="10" max="100" value="90"></label><label>OUTLINE COLOR <input id="crosshair-outline-color-setting" type="color" value="#000000"></label><label>OUTLINE THICKNESS <output id="crosshair-outline-thickness-value">0px</output><input id="crosshair-outline-thickness-setting" type="range" min="0" max="4" value="0"></label><label class="toggle-row">DYNAMIC RESPONSE <input id="crosshair-dynamic-setting" type="checkbox" checked></label><label>DYNAMIC STRENGTH <output id="crosshair-dynamic-strength-value">100%</output><input id="crosshair-dynamic-strength-setting" type="range" min="0" max="200" value="100"></label><h2>HIT MARKER</h2><label>COLOR <input id="hit-marker-color-setting" type="color" value="#67d68b"></label><label>SIZE <output id="hit-marker-size-value">36px</output><input id="hit-marker-size-setting" type="range" min="16" max="72" value="36"></label><label>LENGTH <output id="hit-marker-length-value">9px</output><input id="hit-marker-length-setting" type="range" min="3" max="24" value="9"></label><label>THICKNESS <output id="hit-marker-thickness-value">1px</output><input id="hit-marker-thickness-setting" type="range" min="1" max="5" value="1"></label><label>GAP <output id="hit-marker-gap-value">10px</output><input id="hit-marker-gap-setting" type="range" min="4" max="24" value="10"></label><label>FADE TIME <output id="hit-marker-duration-value">0.22s</output><input id="hit-marker-duration-setting" type="range" min="0.05" max="1" step="0.01" value="0.22"></label></section>
               <section class="settings-group settings-panel-group" data-category-panel="targets"><h2>TARGETS &amp; ENVIRONMENT</h2><label>BACKGROUND <input id="background-color-setting" type="color" value="#0b0e12"></label><label>FLOOR <input id="floor-color-setting" type="color" value="#171d24"></label><label>GRID <input id="grid-color-setting" type="color" value="#33404a"></label><label>TARGET <input id="target-color-setting" type="color" value="#e33f32"></label><label>TARGET SIZE <output id="target-size-value">100%</output><input id="target-size-setting" type="range" min="50" max="150" value="100"></label><label>TRACKING SPEED <output id="tracking-speed-value">4.0</output><input id="tracking-speed-setting" type="range" min="1" max="10" step="0.5" value="4"></label><label>FALLING HORIZONTAL FORCE <output id="falling-horizontal-force-value">3.4</output><input id="falling-horizontal-force-setting" type="range" min="0" max="8" step="0.1" value="3.4"></label><label>FALLING LAUNCH <output id="falling-launch-value">12.0</output><input id="falling-launch-setting" type="range" min="0" max="20" step="0.5" value="12"></label><label>FALLING GRAVITY <output id="falling-gravity-value">18.0</output><input id="falling-gravity-setting" type="range" min="1" max="36" step="0.5" value="18"></label><label>FALLING RESPAWN DELAY <output id="falling-respawn-delay-value">0.60s</output><input id="falling-respawn-delay-setting" type="range" min="0.1" max="2" step="0.05" value="0.6"></label></section>
@@ -167,73 +167,6 @@ const weaponSetting = document.querySelector<HTMLSelectElement>('#weapon-setting
 const currentWeaponName = document.querySelector<HTMLElement>('#current-weapon-name')!
 currentWeaponName.textContent = 'M1911'
 weaponSetting.replaceChildren(new Option('M1911', 'pistol'))
-const scopeMagnificationSetting = document.createElement('select')
-scopeMagnificationSetting.id = 'scope-magnification-setting'
-;[4, 6, 8, 15, 20, 25].forEach((magnification) => {
-  const option = document.createElement('option')
-  option.value = magnification.toString()
-  option.textContent = `${magnification}X`
-  scopeMagnificationSetting.append(option)
-})
-scopeMagnificationSetting.value = '8'
-const scopeMagnificationLabel = document.createElement('label')
-scopeMagnificationLabel.textContent = 'SCOPE MAGNIFICATION '
-scopeMagnificationLabel.append(scopeMagnificationSetting)
-scopeMagnificationLabel.hidden = true
-weaponSetting.closest('label')?.after(scopeMagnificationLabel)
-scopeMagnificationLabel.before(scopePreviewCard)
-const awmFireDelaySetting = document.createElement('input')
-awmFireDelaySetting.id = 'awm-fire-delay-setting'
-awmFireDelaySetting.type = 'range'
-awmFireDelaySetting.min = '0'
-awmFireDelaySetting.max = '2000'
-awmFireDelaySetting.step = '50'
-const awmFireDelayValue = document.createElement('output')
-awmFireDelayValue.id = 'awm-fire-delay-value'
-const awmFireDelayLabel = document.createElement('label')
-awmFireDelayLabel.textContent = 'NEXT SHOT DELAY '
-awmFireDelayLabel.append(awmFireDelayValue, awmFireDelaySetting)
-awmFireDelayLabel.hidden = true
-scopeMagnificationLabel.after(awmFireDelayLabel)
-const awmDisableScopeDuringDelaySetting = document.createElement('input')
-awmDisableScopeDuringDelaySetting.id = 'awm-disable-scope-during-delay-setting'
-awmDisableScopeDuringDelaySetting.type = 'checkbox'
-awmDisableScopeDuringDelaySetting.checked = true
-const awmDisableScopeDuringDelayLabel = document.createElement('label')
-awmDisableScopeDuringDelayLabel.className = 'toggle-row'
-awmDisableScopeDuringDelayLabel.textContent = 'DISABLE SCOPE DURING DELAY '
-awmDisableScopeDuringDelayLabel.append(awmDisableScopeDuringDelaySetting)
-awmFireDelayLabel.after(awmDisableScopeDuringDelayLabel)
-const scopeStyleSetting = document.createElement('select')
-scopeStyleSetting.id = 'scope-style-setting'
-scopeStyleSetting.innerHTML = '<option value="classic">CLASSIC CROSS</option><option value="mil-dot">MIL-DOT</option><option value="cross">FINE CROSS</option>'
-const scopeStyleLabel = document.createElement('label')
-scopeStyleLabel.textContent = 'SCOPE RETICLE '
-scopeStyleLabel.append(scopeStyleSetting)
-scopeStyleLabel.hidden = true
-awmFireDelayLabel.after(scopeStyleLabel)
-const scopeColorSetting = document.createElement('input')
-scopeColorSetting.id = 'scope-color-setting'
-scopeColorSetting.type = 'color'
-scopeColorSetting.value = '#ff3636'
-const scopeColorLabel = document.createElement('label')
-scopeColorLabel.textContent = 'SCOPE COLOR '
-scopeColorLabel.append(scopeColorSetting)
-scopeColorLabel.hidden = true
-scopeStyleLabel.after(scopeColorLabel)
-const scopeThicknessSetting = document.createElement('input')
-scopeThicknessSetting.id = 'scope-thickness-setting'
-scopeThicknessSetting.type = 'range'
-scopeThicknessSetting.min = '1'
-scopeThicknessSetting.max = '4'
-scopeThicknessSetting.value = '1'
-const scopeThicknessValue = document.createElement('output')
-scopeThicknessValue.id = 'scope-thickness-value'
-const scopeThicknessLabel = document.createElement('label')
-scopeThicknessLabel.textContent = 'SCOPE THICKNESS '
-scopeThicknessLabel.append(scopeThicknessValue, scopeThicknessSetting)
-scopeThicknessLabel.hidden = true
-scopeColorLabel.after(scopeThicknessLabel)
 const recoilModeSetting = document.createElement('select')
 recoilModeSetting.id = 'recoil-mode-setting'
 recoilModeSetting.innerHTML = '<option value="recover">KICK + RECOVER</option><option value="sustained">SUSTAINED</option>'
@@ -312,30 +245,6 @@ const dpiSetting = document.querySelector<HTMLInputElement>('#dpi-setting')!
 const dpiValue = document.querySelector<HTMLOutputElement>('#dpi-value')!
 const adsRatioSetting = document.querySelector<HTMLInputElement>('#ads-ratio-setting')!
 const adsRatioValue = document.querySelector<HTMLOutputElement>('#ads-ratio-value')!
-const awmScopeSensitivitySetting = document.createElement('input')
-awmScopeSensitivitySetting.id = 'awm-scope-sensitivity-setting'
-awmScopeSensitivitySetting.type = 'range'
-awmScopeSensitivitySetting.min = '0.1'
-awmScopeSensitivitySetting.max = '2'
-awmScopeSensitivitySetting.step = '0.05'
-awmScopeSensitivitySetting.value = '1'
-const awmScopeSensitivityValue = document.createElement('output')
-awmScopeSensitivityValue.id = 'awm-scope-sensitivity-value'
-awmScopeSensitivityValue.value = '1.00'
-const awmScopeSensitivityLabel = document.createElement('label')
-awmScopeSensitivityLabel.textContent = 'SCOPE SENSITIVITY '
-awmScopeSensitivityLabel.append(awmScopeSensitivityValue, awmScopeSensitivitySetting)
-awmDisableScopeDuringDelayLabel.after(awmScopeSensitivityLabel)
-const scopeSettings = [
-  scopePreviewCard,
-  scopeMagnificationLabel,
-  awmScopeSensitivityLabel,
-  awmFireDelayLabel,
-  awmDisableScopeDuringDelayLabel,
-  scopeStyleLabel,
-  scopeColorLabel,
-  scopeThicknessLabel,
-]
 const adsFovSetting = document.querySelector<HTMLInputElement>('#ads-fov-setting')!
 const adsFovValue = document.querySelector<HTMLOutputElement>('#ads-fov-value')!
 const rawInputSetting = document.querySelector<HTMLInputElement>('#raw-input-setting')!
@@ -361,7 +270,7 @@ const crosshairOutlineColorSetting = document.querySelector<HTMLInputElement>('#
 const crosshairOutlineThicknessSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-thickness-setting')!
 const crosshairOutlineThicknessValue = document.querySelector<HTMLOutputElement>('#crosshair-outline-thickness-value')!
 type ShootingMode = 'microshot' | 'flickshot' | 'gridshot' | 'reflexshot' | 'microshotprecision' | 'flickshotprecision' | 'gridshotprecision' | 'reflexshotprecision' | 'strafetrack' | 'spheretrack' | 'fallingtrack'
-type WeaponId = 'pistol' | 'ak47' | 'awm'
+type WeaponId = 'pistol'
 type RecoilMode = 'recover' | 'sustained'
 type WeaponProfile = {
   fireMode: 'projectile' | 'hitscan'
@@ -377,15 +286,12 @@ type WeaponProfile = {
 }
 const weaponProfiles: Record<WeaponId, WeaponProfile> = {
   pistol: { fireMode: 'projectile', bulletSpeed: 253, recoil: 50, spread: 75, movementSpread: 235, aimingJumpSpread: 350, hipfireJumpSpread: 250, bulletDrop: 100, fireDelay: 0, recoilMode: 'recover' },
-  ak47: { fireMode: 'projectile', bulletSpeed: 710, recoil: 50, spread: 90, movementSpread: 235, aimingJumpSpread: 350, hipfireJumpSpread: 250, bulletDrop: 100, fireDelay: 0, recoilMode: 'sustained' },
-  awm: { fireMode: 'hitscan', bulletSpeed: 940, recoil: 65, spread: 120, movementSpread: 120, aimingJumpSpread: 250, hipfireJumpSpread: 200, bulletDrop: 0, fireDelay: 1000, recoilMode: 'recover' },
 }
 let shootingMode: ShootingMode = 'flickshot'
 let weaponSelection: 'auto' | WeaponId = 'auto'
 let activeWeapon: WeaponId = 'pistol'
 let fireMode: 'projectile' | 'hitscan' = 'projectile'
 let recoilMode: RecoilMode = 'recover'
-let scopeMagnification = 8
 let recoilMultiplier = 1
 let spreadMultiplier = 1
 let gravityMultiplier = 1
@@ -404,7 +310,6 @@ let crosshairDynamicStrength = 1
 let hitMarkerDuration = 0.22
 let dpiMultiplier = 1
 let adsSensitivityRatio = 1
-let awmScopeSensitivityRatio = 1
 let adsFov = 48
 let resolutionScale = 1
 let rawInputEnabled = true
@@ -466,6 +371,45 @@ let storeRoot: THREE.Object3D | null = null
 let storeBounds: THREE.Box3 | null = null
 let isInStore = false
 const parkingObstacles: THREE.Box3[] = []
+const parkingObstacleCellSize = 8
+const parkingObstacleCells = new Map<string, THREE.Box3[]>()
+
+function addParkingObstacle(bounds: THREE.Box3): void {
+  parkingObstacles.push(bounds)
+
+  const minCellX = Math.floor(bounds.min.x / parkingObstacleCellSize)
+  const maxCellX = Math.floor(bounds.max.x / parkingObstacleCellSize)
+  const minCellZ = Math.floor(bounds.min.z / parkingObstacleCellSize)
+  const maxCellZ = Math.floor(bounds.max.z / parkingObstacleCellSize)
+
+  for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+    for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
+      const key = `${cellX}:${cellZ}`
+      const existing = parkingObstacleCells.get(key)
+      if (existing) existing.push(bounds)
+      else parkingObstacleCells.set(key, [bounds])
+    }
+  }
+}
+
+function getNearbyParkingObstacles(): THREE.Box3[] {
+  const minCellX = Math.floor((camera.position.x - 1.2) / parkingObstacleCellSize)
+  const maxCellX = Math.floor((camera.position.x + 1.2) / parkingObstacleCellSize)
+  const minCellZ = Math.floor((camera.position.z - 1.2) / parkingObstacleCellSize)
+  const maxCellZ = Math.floor((camera.position.z + 1.2) / parkingObstacleCellSize)
+  const nearbyObstacles: THREE.Box3[] = []
+
+  for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+    for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
+      const key = `${cellX}:${cellZ}`
+      const cellObstacles = parkingObstacleCells.get(key)
+      if (cellObstacles) nearbyObstacles.push(...cellObstacles)
+    }
+  }
+
+  return nearbyObstacles
+}
+
 const parkingGroundRaycaster = new THREE.Raycaster()
 const parkingWallRaycaster = new THREE.Raycaster()
 const parkingProjectileRaycaster = new THREE.Raycaster()
@@ -491,12 +435,12 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
       object.visible = false
     }
     if (object instanceof THREE.Mesh) {
-      object.castShadow = true
-      object.receiveShadow = true
+      object.castShadow = false
+      object.receiveShadow = false
       const obstacleBounds = new THREE.Box3().setFromObject(object)
       const obstacleSize = obstacleBounds.getSize(new THREE.Vector3())
       if (obstacleSize.y >= 3 && obstacleSize.y <= 8 && obstacleSize.x > 0.2 && obstacleSize.z > 0.2) {
-        parkingObstacles.push(obstacleBounds)
+        addParkingObstacle(obstacleBounds)
       }
       const materials = Array.isArray(object.material) ? object.material : [object.material]
       materials.forEach((material) => {
@@ -533,6 +477,11 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
     const fixedBaseX = slotMarker ? slotBounds.min.x - 3 : 0
     const secondRowBaseX = fixedBaseX - 42
     const reversedRowBaseX = secondRowBaseX + 31
+    const secondReversedRowBaseX = reversedRowBaseX - 42
+    const fifthRowBaseX = secondReversedRowBaseX - 16
+    const fifthRowRotationY = Math.PI / 2
+    const sixthRowBaseX = fifthRowBaseX - 16
+    const sixthRowRotationY = Math.PI / 2
     const carRows = [
       {
         x: fixedBaseX,
@@ -557,6 +506,30 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
         count: 13,
         zOffsets: [0, 0.75, 1, 1.25, 1.5, 2.5, 3, 3.5, 4, 5, 4, 3, 2, 1, 0],
         rotationY: Math.PI,
+      },
+      {
+        x: secondReversedRowBaseX,
+        startZ: -65,
+        endZ: 53,
+        count: 13,
+        zOffsets: [0, 0.75, 1, 1.25, 1.5, 2.5, 3, 3.5, 4, 5, 4, 3, 2, 1, 0],
+        rotationY: Math.PI,
+      },
+      {
+        x: fifthRowBaseX,
+        startZ: 0,
+        endZ: 60,
+        count: 5,
+        zOffsets: [0, 0.75, 1, 1.25, 1.5, 2.5, 3, 3.5, 4, 5, 4, 3, 2, 1, 0],
+        rotationY: fifthRowRotationY,
+      },
+      {
+        x: sixthRowBaseX,
+        startZ: 0,
+        endZ: 60,
+        count: 5,
+        zOffsets: [0, 0.75, 1, 1.25, 1.5, 2.5, 3, 3.5, 4, 5, 4, 3, 2, 1, 0],
+        rotationY: sixthRowRotationY,
       },
     ]
 
@@ -595,14 +568,14 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
                 meshMaterial.side = THREE.DoubleSide
               }
             })
-            object.castShadow = true
-            object.receiveShadow = true
+            object.castShadow = false
+            object.receiveShadow = false
           }
         })
 
         const carWorldBounds = new THREE.Box3().setFromObject(parkedCar)
         const carCollisionBounds = carWorldBounds.clone().expandByScalar(0.18)
-        parkingObstacles.push(carCollisionBounds)
+        addParkingObstacle(carCollisionBounds)
         scene.add(parkedCar)
       }
     }
@@ -634,8 +607,8 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
         object.visible = false
       }
       if (object instanceof THREE.Mesh) {
-        object.castShadow = true
-        object.receiveShadow = true
+        object.castShadow = false
+        object.receiveShadow = false
       }
     })
 
@@ -761,8 +734,6 @@ rearSightLeft.visible = false
 rearSightRight.visible = false
 frontSight.visible = false
 let coltModel: THREE.Object3D | null = null
-let ak47Model: THREE.Object3D | null = null
-let awmModel: THREE.Object3D | null = null
 let currentWeaponModel: THREE.Object3D | null = null
 const weaponMuzzlePositions = new Map<WeaponId, THREE.Vector3>()
 const coltLoader = new FBXLoader()
@@ -827,7 +798,7 @@ void fetch(pistolSoundUrl)
   .then((buffer) => { gunshotBuffer = buffer })
   .catch((error: unknown) => console.error('Gunshot audio failed to load.', error))
 
-function resolveWeaponForMode(mode: ShootingMode): WeaponId {
+function resolveWeaponForMode(_mode: ShootingMode): WeaponId {
   return 'pistol'
 }
 
@@ -842,13 +813,11 @@ function saveCurrentWeaponProfile(): void {
   profile.aimingJumpSpread = Number(aimingJumpSpreadSetting.value)
   profile.hipfireJumpSpread = Number(hipfireJumpSpreadSetting.value)
   profile.bulletDrop = Number(bulletDropSetting.value)
-  profile.fireDelay = Number(awmFireDelaySetting.value)
   profile.recoilMode = recoilModeSetting.value as RecoilMode
 }
 
 function applyWeaponProfile(weaponId: WeaponId): void {
   const profile = weaponProfiles[weaponId]
-  if (weaponId === 'awm' && profile.fireMode === 'projectile' && profile.bulletSpeed <= 0) profile.bulletSpeed = 940
   fireMode = profile.fireMode
   fireModeSetting.value = profile.fireMode
   recoilMode = profile.recoilMode
@@ -868,8 +837,6 @@ function applyWeaponProfile(weaponId: WeaponId): void {
   hipfireJumpSpreadValue.value = `${profile.hipfireJumpSpread}%`
   bulletDropSetting.value = profile.bulletDrop.toString()
   bulletDropValue.value = `${profile.bulletDrop}%`
-  awmFireDelaySetting.value = profile.fireDelay.toString()
-  awmFireDelayValue.value = profile.fireDelay === 0 ? 'OFF' : `${(profile.fireDelay / 1000).toFixed(2)}s`
   projectileVelocity = profile.bulletSpeed
   recoilMultiplier = profile.recoil / 50
   spreadMultiplier = profile.spread / 50
@@ -883,29 +850,22 @@ function applyWeaponProfile(weaponId: WeaponId): void {
 function applyWeaponSelection(): void {
   activeWeapon = resolveWeaponForMode(shootingMode)
   applyWeaponProfile(activeWeapon)
-  const hasScope = activeWeapon === 'awm'
-  if (!hasScope) stopAutomaticFire()
-  scopeSettings.forEach((scopeSetting) => {
-    scopeSetting.hidden = !hasScope
-    scopeSetting.style.setProperty('display', hasScope ? '' : 'none', hasScope ? '' : 'important')
-  })
-  if (!hasScope) scopeOverlay.classList.remove('is-visible')
+  stopAutomaticFire()
+  scopeOverlay.classList.remove('is-visible')
   if (coltModel) coltModel.visible = activeWeapon === 'pistol'
-  if (ak47Model) ak47Model.visible = activeWeapon === 'ak47'
-  if (awmModel) awmModel.visible = activeWeapon === 'awm'
-  currentWeaponModel = activeWeapon === 'ak47' ? ak47Model : activeWeapon === 'awm' ? awmModel : coltModel
+  currentWeaponModel = coltModel
   const muzzlePosition = weaponMuzzlePositions.get(activeWeapon)
   if (muzzlePosition) {
     modelMuzzle.position.copy(muzzlePosition)
     muzzleFlash.position.copy(modelMuzzle.position)
-    muzzleFlash.position.y += activeWeapon === 'pistol' ? 0.22 : 0.14
+    muzzleFlash.position.y += 0.22
     muzzleFlash.position.z -= 0.2
   }
-  currentWeaponName.textContent = activeWeapon === 'ak47' ? 'AK47' : activeWeapon === 'awm' ? 'L96A1' : 'M1911'
+  currentWeaponName.textContent = 'M1911'
   resetRecoilState()
   resetCameraView()
   if (aiming) setAiming(true)
-  else weaponRotation.copy(activeWeapon === 'ak47' || activeWeapon === 'awm' ? akHipRotation : hipRotation)
+  else weaponRotation.copy(hipRotation)
   refreshWeaponRender()
 }
 
@@ -939,9 +899,7 @@ function getMuzzleWorldPosition(): THREE.Vector3 {
 
 let aiming = false
 crosshair.classList.toggle('is-hipfire-hidden', crosshairHideWhenNotAiming && !aiming)
-let nextAwmShotAt = 0
 let aimButtonHeld = false
-let awmAimResumeTimer: number | null = null
 let recoilPitch = 0
 let appliedRecoilPitch = 0
 let weaponRecoilPitch = 0
@@ -954,7 +912,6 @@ let movementSpreadMultiplier = 2.25
 let aimingJumpSpreadMultiplier = 5.5
 let hipfireJumpSpreadMultiplier = 4.5
 function getShotSpread(moving: boolean, airborne: boolean): number {
-  if (activeWeapon === 'awm' && aiming) return 0
   const baseSpread = aiming ? aimingSpread : hipfireSpread
   const movementMultiplier = moving ? movementSpreadMultiplier : 1
   const jumpMultiplier = airborne ? aiming ? aimingJumpSpreadMultiplier : hipfireJumpSpreadMultiplier : 1
@@ -969,19 +926,14 @@ function getSpreadPixels(moving: boolean, airborne: boolean): number {
 }
 
 function triggerMuzzleFlash(): void {
-  if (activeWeapon === 'awm') {
-    muzzleFlash.material.opacity = 0
-    return
-  }
-  const isAkFlash = activeWeapon === 'ak47'
   muzzleFlash.scale.set(
-    isAkFlash ? 0.42 + Math.random() * 0.14 : 0.7 + Math.random() * 0.3,
-    isAkFlash ? 1.45 + Math.random() * 0.35 : 0.8 + Math.random() * 0.35,
-    isAkFlash ? 0.42 + Math.random() * 0.14 : 0.7 + Math.random() * 0.3,
+    0.7 + Math.random() * 0.3,
+    0.8 + Math.random() * 0.35,
+    0.7 + Math.random() * 0.3,
   )
   gsap.killTweensOf(muzzleFlash.material)
-  muzzleFlash.material.opacity = isAkFlash ? 0.92 : 0.78
-  gsap.to(muzzleFlash.material, { opacity: 0, duration: isAkFlash ? 0.09 : 0.07, ease: 'power2.out' })
+  muzzleFlash.material.opacity = 0.78
+  gsap.to(muzzleFlash.material, { opacity: 0, duration: 0.07, ease: 'power2.out' })
 }
 
 function applyRecoil(): void {
@@ -1009,62 +961,25 @@ function resetCameraView(): void {
 }
 
 function getActiveAdsFov(): number {
-  if (activeWeapon === 'awm') return baseFov / scopeMagnification
   return THREE.MathUtils.clamp(baseFov * (adsFov / 65), 1, 179)
 }
 
 function setAiming(nextAiming: boolean): void {
-  if (nextAiming && activeWeapon === 'awm' && awmDisableScopeDuringDelaySetting.checked && performance.now() < nextAwmShotAt) {
-    scheduleAwmAimResume()
-    return
-  }
   aiming = nextAiming
   updatePointerSensitivity()
-  const position = aiming
-    ? activeWeapon === 'ak47' || activeWeapon === 'awm' ? akAdsPosition : adsPosition
-    : hipPosition
-  const rotation = aiming
-    ? activeWeapon === 'ak47' || activeWeapon === 'awm' ? akAdsRotation : adsRotation
-    : activeWeapon === 'ak47' || activeWeapon === 'awm' ? akHipRotation : hipRotation
+  const position = aiming ? adsPosition : hipPosition
+  const rotation = aiming ? adsRotation : hipRotation
   gsap.to(weaponPosition, { x: position.x, y: position.y, z: position.z, duration: 0.18, ease: 'power2.out' })
   gsap.to(weaponRotation, { x: rotation.x, y: rotation.y, z: rotation.z, duration: 0.18, ease: 'power2.out' })
-  const usingScope = aiming && activeWeapon === 'awm'
-  scopeOverlay.classList.toggle('is-visible', usingScope)
-  crosshair.classList.toggle('is-scope-hidden', usingScope)
+  scopeOverlay.classList.toggle('is-visible', false)
+  crosshair.classList.toggle('is-scope-hidden', false)
   crosshair.classList.toggle('is-hipfire-hidden', crosshairHideWhenNotAiming && !aiming)
-  if (awmModel) awmModel.visible = activeWeapon === 'awm' && !aiming
-  gsap.to(camera, { fov: aiming ? getActiveAdsFov() : baseFov, duration: activeWeapon === 'awm' ? 0 : 0.2, ease: 'power2.out', onUpdate: () => camera.updateProjectionMatrix() })
-}
-
-function scheduleAwmAimResume(): void {
-  if (awmAimResumeTimer !== null) window.clearTimeout(awmAimResumeTimer)
-  const delay = Math.max(0, nextAwmShotAt - performance.now())
-  awmAimResumeTimer = window.setTimeout(() => {
-    awmAimResumeTimer = null
-    if (aimButtonHeld && activeWeapon === 'awm' && controls.isLocked) setAiming(true)
-  }, delay)
-}
-
-function cancelAwmAimResume(): void {
-  if (awmAimResumeTimer === null) return
-  window.clearTimeout(awmAimResumeTimer)
-  awmAimResumeTimer = null
+  gsap.to(camera, { fov: aiming ? getActiveAdsFov() : baseFov, duration: 0.2, ease: 'power2.out', onUpdate: () => camera.updateProjectionMatrix() })
 }
 
 function updatePointerSensitivity(): void {
   const baseSensitivity = Number(settingsSensitivity.value) * dpiMultiplier
-  const aimingSensitivity = activeWeapon === 'awm' ? awmScopeSensitivityRatio : adsSensitivityRatio
-  controls.pointerSpeed = baseSensitivity * (aiming ? aimingSensitivity : 1)
-}
-
-function updateScopeReticle(): void {
-  scopePreviewTargets.forEach((scopeTarget) => {
-    scopeTarget.classList.remove('scope-classic', 'scope-mil-dot', 'scope-cross')
-    scopeTarget.classList.add(`scope-${scopeStyleSetting.value}`)
-    scopeTarget.style.setProperty('--scope-color', scopeColorSetting.value)
-    scopeTarget.style.setProperty('--scope-thickness', `${scopeThicknessSetting.value}px`)
-  })
-  scopeThicknessValue.value = `${scopeThicknessSetting.value}px`
+  controls.pointerSpeed = baseSensitivity * (aiming ? adsSensitivityRatio : 1)
 }
 
 function handlePointerDown(event: PointerEvent): void {
@@ -1072,8 +987,7 @@ function handlePointerDown(event: PointerEvent): void {
     event.preventDefault()
     warmGunshotAudio()
     leftButtonHeld = true
-    if (activeWeapon === 'ak47') startAutomaticFire()
-    else fireShot()
+    fireShot()
   }
 }
 
@@ -1082,20 +996,17 @@ function handleMouseDown(event: MouseEvent): void {
     event.preventDefault()
     warmGunshotAudio()
     leftButtonHeld = true
-    if (activeWeapon === 'ak47') startAutomaticFire()
-    else fireShot()
+    fireShot()
   }
   if (event.button !== 2 || !controls.isLocked) return
   event.preventDefault()
   aimButtonHeld = true
-  cancelAwmAimResume()
   setAiming(true)
 }
 
 function handlePointerUp(event: PointerEvent): void {
   if (event.button === 2) {
     aimButtonHeld = false
-    cancelAwmAimResume()
     setAiming(false)
   }
 }
@@ -1104,15 +1015,8 @@ function releaseAim(): void {
   if (aiming) setAiming(false)
 }
 
-const akFireInterval = 60000 / 600
 let automaticFireTimer: number | null = null
 let leftButtonHeld = false
-
-function startAutomaticFire(): void {
-  if (activeWeapon !== 'ak47' || automaticFireTimer !== null) return
-  fireShot()
-  automaticFireTimer = window.setInterval(fireShot, akFireInterval)
-}
 
 function stopAutomaticFire(): void {
   if (automaticFireTimer === null) return
@@ -1132,14 +1036,12 @@ document.addEventListener('pointerup', (event) => {
 })
 document.addEventListener('pointercancel', () => {
   aimButtonHeld = false
-  cancelAwmAimResume()
   stopAutomaticFire()
   releaseAim()
 })
 window.addEventListener('mouseup', (event) => {
   if (event.button === 2) {
     aimButtonHeld = false
-    cancelAwmAimResume()
     releaseAim()
   }
   if (event.button === 0) {
@@ -1150,7 +1052,6 @@ window.addEventListener('mouseup', (event) => {
 window.addEventListener('blur', () => {
   aimButtonHeld = false
   leftButtonHeld = false
-  cancelAwmAimResume()
   stopAutomaticFire()
   releaseAim()
 })
@@ -1161,41 +1062,6 @@ document.addEventListener('visibilitychange', () => {
   } else warmGunshotAudio()
 })
 canvas.addEventListener('contextmenu', (event) => event.preventDefault())
-scopeMagnificationSetting.addEventListener('change', () => {
-  scopeMagnification = Number(scopeMagnificationSetting.value)
-  if (aiming && activeWeapon === 'awm') {
-    camera.fov = getActiveAdsFov()
-    camera.updateProjectionMatrix()
-  }
-})
-awmFireDelaySetting.addEventListener('input', () => {
-  const delay = Number(awmFireDelaySetting.value)
-  awmFireDelayValue.value = delay === 0 ? 'OFF' : `${(delay / 1000).toFixed(2)}s`
-  if (!restoringSettings) weaponProfiles.awm.fireDelay = delay
-})
-awmDisableScopeDuringDelaySetting.addEventListener('change', () => {
-  if (activeWeapon !== 'awm' || !aimButtonHeld || !controls.isLocked) return
-  if (awmDisableScopeDuringDelaySetting.checked && aiming && performance.now() < nextAwmShotAt) {
-    releaseAim()
-    scheduleAwmAimResume()
-  } else if (!awmDisableScopeDuringDelaySetting.checked && !aiming) {
-    cancelAwmAimResume()
-    setAiming(true)
-  }
-})
-scopeStyleSetting.addEventListener('change', updateScopeReticle)
-scopeColorSetting.addEventListener('input', updateScopeReticle)
-scopeThicknessSetting.addEventListener('input', updateScopeReticle)
-canvas.addEventListener('wheel', (event) => {
-  if (!aiming || activeWeapon !== 'awm' || scopeMagnification < 6) return
-  const magnifications = [4, 6, 8, 15, 20, 25]
-  const currentIndex = magnifications.indexOf(scopeMagnification)
-  const nextIndex = THREE.MathUtils.clamp(currentIndex + (event.deltaY < 0 ? 1 : -1), 1, magnifications.length - 1)
-  scopeMagnificationSetting.value = magnifications[nextIndex].toString()
-  scopeMagnificationSetting.dispatchEvent(new Event('change'))
-  event.preventDefault()
-})
-
 settingsSensitivity.addEventListener('input', () => {
   settingsSensitivityValue.value = Number(settingsSensitivity.value).toFixed(2)
   updatePointerSensitivity()
@@ -1208,11 +1074,6 @@ dpiSetting.addEventListener('input', () => {
 adsRatioSetting.addEventListener('input', () => {
   adsSensitivityRatio = Number(adsRatioSetting.value)
   adsRatioValue.value = adsRatioSetting.value
-  updatePointerSensitivity()
-})
-awmScopeSensitivitySetting.addEventListener('input', () => {
-  awmScopeSensitivityRatio = Number(awmScopeSensitivitySetting.value)
-  awmScopeSensitivityValue.value = awmScopeSensitivityRatio.toFixed(2)
   updatePointerSensitivity()
 })
 adsFovSetting.addEventListener('input', () => {
@@ -1239,11 +1100,6 @@ maxFpsSetting.addEventListener('change', () => {
 })
 fireModeSetting.addEventListener('change', () => {
   fireMode = fireModeSetting.value as 'projectile' | 'hitscan'
-  if (activeWeapon === 'awm' && fireMode === 'projectile' && weaponProfiles.awm.bulletSpeed <= 0) {
-    bulletSpeedSetting.value = '940'
-    bulletSpeedValue.value = '940'
-    projectileVelocity = 940
-  }
   saveCurrentWeaponProfile()
   updateBallisticControlState()
 })
@@ -1561,7 +1417,7 @@ controls.addEventListener('lock', handleLockChange)
 controls.addEventListener('unlock', handleLockChange)
 
 function getRenderPixelRatio(): number {
-  return Math.min(window.devicePixelRatio * resolutionScale, 5)
+  return Math.min(window.devicePixelRatio * resolutionScale, 2)
 }
 
 let renderer = new THREE.WebGLRenderer({ canvas, antialias: antialiasingSetting.checked, powerPreference: 'high-performance' })
@@ -1645,7 +1501,7 @@ weaponPreviewRenderer.setAnimationLoop(() => {
 scene.add(new THREE.HemisphereLight('#8493a8', '#050709', 0.28))
 const keyLight = new THREE.DirectionalLight('#b4a58f', 0.42)
 keyLight.position.set(-4, 7, 4)
-keyLight.castShadow = true
+keyLight.castShadow = false
 scene.add(keyLight)
 
 const floor = new THREE.Mesh(
@@ -1653,7 +1509,7 @@ const floor = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ color: '#171d24', roughness: 0.9 }),
 )
 floor.rotation.x = -Math.PI / 2
-floor.receiveShadow = true
+floor.receiveShadow = false
 floor.visible = false
 scene.add(floor)
 
@@ -1705,7 +1561,8 @@ function resolveParkingCollision(): void {
     }
   }
   const playerHeightBounds = new THREE.Vector2(camera.position.y - 0.8, camera.position.y + 0.8)
-  for (const obstacle of parkingObstacles) {
+  const nearbyObstacles = getNearbyParkingObstacles()
+  for (const obstacle of nearbyObstacles) {
     if (playerHeightBounds.x >= obstacle.max.y || playerHeightBounds.y <= obstacle.min.y) continue
     const overlapsX = camera.position.x > obstacle.min.x - playerRadius && camera.position.x < obstacle.max.x + playerRadius
     const overlapsZ = camera.position.z > obstacle.min.z - playerRadius && camera.position.z < obstacle.max.z + playerRadius
@@ -2060,7 +1917,7 @@ const projectileLifetime = 3
 
 function spawnProjectile(direction: THREE.Vector3): void {
   shotOrigin.copy(getMuzzleWorldPosition())
-  const muzzleVelocity = activeWeapon === 'ak47' ? 710 : projectileVelocity
+  const muzzleVelocity = projectileVelocity
   const bodyDescription = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(shotOrigin.x, shotOrigin.y, shotOrigin.z)
     .setLinvel(direction.x * muzzleVelocity, direction.y * muzzleVelocity, direction.z * muzzleVelocity)
@@ -2242,12 +2099,6 @@ function createImpactSpark(position: THREE.Vector3, normal: THREE.Vector3, incom
 }
 
 function fireShot(): void {
-  const shotTime = performance.now()
-  if (activeWeapon === 'awm' && shotTime < nextAwmShotAt) return
-  if (activeWeapon === 'awm') {
-    const fireDelay = weaponProfiles.awm.fireDelay
-    nextAwmShotAt = fireDelay > 0 ? shotTime + fireDelay : shotTime
-  }
   playGunshot()
   applyRecoil()
   shotOrigin.copy(getMuzzleWorldPosition())
@@ -2282,26 +2133,11 @@ function fireShot(): void {
     const tracerOffset = cameraUp.clone().multiplyScalar(0.08)
     const tracerStart = shotOrigin.clone().add(tracerOffset)
     const tracerFinish = tracerEnd.clone().add(tracerOffset)
-    if (activeWeapon === 'awm') createHitscanTracer(tracerFinish, tracerStart)
-    else createLaserTracer(tracerStart, tracerFinish)
+    createLaserTracer(tracerStart, tracerFinish)
     if (hit) registerTargetHit(hit.object as typeof target)
-    if (activeWeapon === 'awm') {
-      if (awmDisableScopeDuringDelaySetting.checked) {
-        releaseAim()
-        if (aimButtonHeld) scheduleAwmAimResume()
-      } else {
-        cancelAwmAimResume()
-      }
-    }
     return
   }
   spawnProjectile(shotDirection)
-  if (activeWeapon === 'awm' && awmDisableScopeDuringDelaySetting.checked) {
-    releaseAim()
-    if (aimButtonHeld) scheduleAwmAimResume()
-  } else if (activeWeapon === 'awm') {
-    cancelAwmAimResume()
-  }
 }
 
 function resizeRenderer(): void {
