@@ -61,7 +61,7 @@ app.innerHTML = `
               <section class="settings-group settings-panel-group" data-category-panel="controls"><h2>MOUSE &amp; CONTROLS</h2><label>SENSITIVITY <output id="settings-sensitivity-value">0.70</output><input id="settings-sensitivity" type="range" min="0.2" max="1.5" step="0.05" value="0.7"></label><label>DPI MULTIPLIER <output id="dpi-value">800</output><input id="dpi-setting" type="range" min="100" max="3200" step="100" value="800"></label><label>ADS RATIO <output id="ads-ratio-value">1.00</output><input id="ads-ratio-setting" type="range" min="0.1" max="2" step="0.05" value="1"></label><label>ADS FOV <output id="ads-fov-value">48</output><input id="ads-fov-setting" type="range" min="30" max="65" step="1" value="48"></label><label class="toggle-row">RAW INPUT <input id="raw-input-setting" type="checkbox" checked></label></section>
               <section class="settings-group settings-panel-group" data-category-panel="crosshair"><h2>CROSSHAIR</h2><label>STYLE <select id="crosshair-style-setting"><option>DOT + CROSS</option><option>DOT</option><option>CROSS</option><option>CIRCLE</option></select></label><label>COLOR <input id="crosshair-color-setting" type="color" value="#ffffff"></label><label>GAP <output id="crosshair-gap-value">14px</output><input id="crosshair-gap-setting" type="range" min="0" max="30" value="14"></label><label>LENGTH <output id="crosshair-length-value">8px</output><input id="crosshair-length-setting" type="range" min="2" max="24" value="8"></label><label>THICKNESS <output id="crosshair-thickness-value">1px</output><input id="crosshair-thickness-setting" type="range" min="1" max="5" value="1"></label><label>DOT SIZE <output id="crosshair-dot-size-value">5px</output><input id="crosshair-dot-size-setting" type="range" min="1" max="12" value="5"></label><label>CIRCLE SIZE <output id="crosshair-circle-size-value">30px</output><input id="crosshair-circle-size-setting" type="range" min="8" max="58" value="30"></label><label>OPACITY <output id="crosshair-opacity-value">90%</output><input id="crosshair-opacity-setting" type="range" min="10" max="100" value="90"></label><label>OUTLINE COLOR <input id="crosshair-outline-color-setting" type="color" value="#000000"></label><label>OUTLINE THICKNESS <output id="crosshair-outline-thickness-value">0px</output><input id="crosshair-outline-thickness-setting" type="range" min="0" max="4" value="0"></label><label class="toggle-row">DYNAMIC RESPONSE <input id="crosshair-dynamic-setting" type="checkbox" checked></label><label>DYNAMIC STRENGTH <output id="crosshair-dynamic-strength-value">100%</output><input id="crosshair-dynamic-strength-setting" type="range" min="0" max="200" value="100"></label><h2>HIT MARKER</h2><label>COLOR <input id="hit-marker-color-setting" type="color" value="#67d68b"></label><label>SIZE <output id="hit-marker-size-value">36px</output><input id="hit-marker-size-setting" type="range" min="16" max="72" value="36"></label><label>LENGTH <output id="hit-marker-length-value">9px</output><input id="hit-marker-length-setting" type="range" min="3" max="24" value="9"></label><label>THICKNESS <output id="hit-marker-thickness-value">1px</output><input id="hit-marker-thickness-setting" type="range" min="1" max="5" value="1"></label><label>GAP <output id="hit-marker-gap-value">10px</output><input id="hit-marker-gap-setting" type="range" min="4" max="24" value="10"></label><label>FADE TIME <output id="hit-marker-duration-value">0.22s</output><input id="hit-marker-duration-setting" type="range" min="0.05" max="1" step="0.01" value="0.22"></label></section>
               <section class="settings-group settings-panel-group" data-category-panel="targets"><h2>TARGETS &amp; ENVIRONMENT</h2><label>BACKGROUND <input id="background-color-setting" type="color" value="#0b0e12"></label><label>FLOOR <input id="floor-color-setting" type="color" value="#171d24"></label><label>GRID <input id="grid-color-setting" type="color" value="#33404a"></label><label>TARGET <input id="target-color-setting" type="color" value="#e33f32"></label><label>TARGET SIZE <output id="target-size-value">100%</output><input id="target-size-setting" type="range" min="50" max="150" value="100"></label><label>TRACKING SPEED <output id="tracking-speed-value">4.0</output><input id="tracking-speed-setting" type="range" min="1" max="10" step="0.5" value="4"></label><label>FALLING HORIZONTAL FORCE <output id="falling-horizontal-force-value">3.4</output><input id="falling-horizontal-force-setting" type="range" min="0" max="8" step="0.1" value="3.4"></label><label>FALLING LAUNCH <output id="falling-launch-value">12.0</output><input id="falling-launch-setting" type="range" min="0" max="20" step="0.5" value="12"></label><label>FALLING GRAVITY <output id="falling-gravity-value">18.0</output><input id="falling-gravity-setting" type="range" min="1" max="36" step="0.5" value="18"></label><label>FALLING RESPAWN DELAY <output id="falling-respawn-delay-value">0.60s</output><input id="falling-respawn-delay-setting" type="range" min="0.1" max="2" step="0.05" value="0.6"></label></section>
-              <section class="settings-group settings-panel-group" data-category-panel="sound"><h2>SOUND</h2><label>GUNSHOT VOLUME <output id="gunshot-volume-value">50%</output><input id="gunshot-volume-setting" type="range" min="0" max="100" value="50"></label></section>
+              <section class="settings-group settings-panel-group" data-category-panel="sound"><h2>SOUND</h2><label>MASTER VOLUME <output id="master-volume-value">100%</output><input id="master-volume-setting" type="range" min="0" max="100" value="100"></label></section>
             </div>
           </div>
         </div>
@@ -92,6 +92,11 @@ vehicleSearchHint.className = 'vehicle-search-hint'
 vehicleSearchHint.textContent = '[P]: PANIC BUTTON'
 vehicleSearchHint.hidden = true
 range.append(vehicleSearchHint)
+const weaponPickupPrompt = document.createElement('div')
+weaponPickupPrompt.className = 'interaction-prompt'
+weaponPickupPrompt.textContent = 'PRESS [F] TO PICK UP PISTOL'
+weaponPickupPrompt.hidden = true
+range.append(weaponPickupPrompt)
 const trueCarPrompt = document.createElement('div')
 trueCarPrompt.className = 'interaction-prompt'
 trueCarPrompt.textContent = 'PRESS [F] TO ENTER'
@@ -236,8 +241,8 @@ const backgroundColorSetting = document.querySelector<HTMLInputElement>('#backgr
 const floorColorSetting = document.querySelector<HTMLInputElement>('#floor-color-setting')!
 const gridColorSetting = document.querySelector<HTMLInputElement>('#grid-color-setting')!
 const targetColorSetting = document.querySelector<HTMLInputElement>('#target-color-setting')!
-const gunshotVolumeSetting = document.querySelector<HTMLInputElement>('#gunshot-volume-setting')!
-const gunshotVolumeValue = document.querySelector<HTMLOutputElement>('#gunshot-volume-value')!
+const masterVolumeSetting = document.querySelector<HTMLInputElement>('#master-volume-setting')!
+const masterVolumeValue = document.querySelector<HTMLOutputElement>('#master-volume-value')!
 const crosshairStyleSetting = document.querySelector<HTMLSelectElement>('#crosshair-style-setting')!
 const crosshairColorSetting = document.querySelector<HTMLInputElement>('#crosshair-color-setting')!
 const crosshairGapSetting = document.querySelector<HTMLInputElement>('#crosshair-gap-setting')!
@@ -416,7 +421,6 @@ let fallingRespawnDelay = 0.6
 let maxFps = 0
 let targetSizeMultiplier = 1
 let hitVfxEnabled = true
-let hitSoundEnabled = true
 let crosshairDynamicEnabled = true
 let crosshairHideWhenNotAiming = false
 let crosshairDynamicStrength = 1
@@ -486,9 +490,12 @@ const trueCarEspObjects: THREE.Object3D[] = []
 let parkedCarsReady = false
 let keyPickupObject: THREE.Object3D | null = null
 let keyPickupCollected = false
+let weaponPickupObject: THREE.Object3D | null = null
+let weaponPickupCollected = false
 let trueCar: THREE.Object3D | null = null
 let trueCarEntered = false
 let trueCarSoundPlaying = false
+let fearActive = false
 let carEndingShakeStartedAt = -Infinity
 let carEndingShakePeaks: number[] = []
 type MatryoshkaMobState = 'wander' | 'investigate' | 'chase'
@@ -538,8 +545,8 @@ const matryoshkaPatrolWaypoints = [
   new THREE.Vector3(79.959, 12.642, -65.004),
 ]
 const matryoshkaDetectionRange = 34
-const matryoshkaSpeed = 7.65
-const matryoshkaChaseSpeed = 7.65
+const matryoshkaSpeed = 8
+const matryoshkaChaseSpeed = 8
 const matryoshkaChaseMemoryDistance = 18
 const matryoshkaPathRefreshInterval = 0.6
 const matryoshkaEyeHeight = 2.5
@@ -625,6 +632,7 @@ function triggerPlayerDeath(): void {
   fearOverlay.classList.remove('is-visible')
   controls.unlock()
   stopRunningSound()
+  stopHeartbeatSound()
   keys.clear()
   matryoshkaMobs.forEach((mob) => { mob.velocity.set(0, 0, 0); mob.route = [] })
 }
@@ -639,6 +647,7 @@ function exitApplication(): void {
 
 function returnToHome(): void {
   if (controls.isLocked) controls.unlock()
+  stopHeartbeatSound()
   window.location.reload()
 }
 
@@ -1187,11 +1196,14 @@ function recoverMatryoshkaMob(mob: MatryoshkaMob): void {
 function updateMatryoshkaMobs(now: number, delta: number): void {
   if (!parkingLotRoot || matryoshkaWaypoints.length === 0) return
   if (startScreen.classList.contains('is-visible') || settingsOverlay.classList.contains('is-open')) {
+    fearActive = false
+    fearOverlay.classList.remove('is-visible')
+    updateHeartbeatPlaybackRate()
     matryoshkaMobs.forEach((mob) => { mob.velocity.set(0, 0, 0) })
     return
   }
   if (playerDeathActive) return
-  let fearActive = false
+  fearActive = false
   for (const mob of matryoshkaMobs) {
     if (mob.knockedDownAt > 0) syncMatryoshkaFromPhysics(mob)
     mob.object.getWorldPosition(matryoshkaMobPosition)
@@ -1283,6 +1295,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
     }
   }
   fearOverlay.classList.toggle('is-visible', fearActive)
+  updateHeartbeatPlaybackRate()
 }
 
 function spawnMatryoshkaMob(): void {
@@ -1533,8 +1546,8 @@ function moveMatryoshkaWithVehicleSlide(mob: MatryoshkaMob, delta: number, now: 
       clearSlides.sort((first, second) => {
         const firstStickyScore = mob.slideDirectionUntil > now ? first.dot(mob.slideDirection) * 8 : 0
         const secondStickyScore = mob.slideDirectionUntil > now ? second.dot(mob.slideDirection) * 8 : 0
-        const firstTargetScore = first.dot(targetDirection) * (mob.isClone ? -1 : 1)
-        const secondTargetScore = second.dot(targetDirection) * (mob.isClone ? -1 : 1)
+        const firstTargetScore = first.dot(targetDirection)
+        const secondTargetScore = second.dot(targetDirection)
         return (secondTargetScore + secondStickyScore) - (firstTargetScore + firstStickyScore)
       })
       const slide = clearSlides[0]
@@ -2275,6 +2288,11 @@ coltLoader.load(coltModelUrl, (colt) => {
   weaponMuzzlePositions.set('pistol', modelMuzzle.position.clone())
   currentWeaponModel = colt
   weapon.add(colt)
+  const pickup = colt.clone(true)
+  pickup.visible = true
+  pickup.scale.multiplyScalar(0.72)
+  weaponPickupObject = pickup
+  placeWeaponPickupWhenReady()
   applyWeaponSelection()
 }, undefined, (error) => {
   console.error('Failed to load Colt 1911 model or textures.', error)
@@ -2282,6 +2300,7 @@ coltLoader.load(coltModelUrl, (colt) => {
 weapon.scale.setScalar(0.72)
 weapon.position.copy(weaponPosition)
 weapon.rotation.copy(weaponRotation)
+weapon.visible = false
 camera.add(weapon)
 
 const muzzleLocalPosition = new THREE.Vector3()
@@ -2292,7 +2311,19 @@ let knockSoundBuffer: AudioBuffer | null = null
 let trueCarSoundBuffer: AudioBuffer | null = null
 let runningSoundBuffer: AudioBuffer | null = null
 let runningSoundSource: AudioBufferSourceNode | null = null
-let soundVolumeMultiplier = 0.5
+let soundVolumeMultiplier = 1
+let weaponAmmo = 0
+const weaponMagazineSize = 7
+let weaponReloading = false
+let weaponReloadStartedAt = -Infinity
+let weaponReloadDuration = 1
+let reloadSoundBuffer: AudioBuffer | null = null
+let dryFireSoundBuffer: AudioBuffer | null = null
+let heartbeatSoundBuffer: AudioBuffer | null = null
+let heartbeatSoundSource: AudioBufferSourceNode | null = null
+let heartbeatSoundGain: GainNode | null = null
+let heartbeatFearLoopStart = 0
+let heartbeatFearLoopEnd = 0
 void fetch(pistolSoundUrl)
   .then((response) => response.arrayBuffer())
   .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
@@ -2314,6 +2345,34 @@ const carBreakSoundReady = fetch(carBreakSoundUrl)
     carEndingShakePeaks = detectCarBreakPeaks(buffer)
   })
   .catch((error: unknown) => console.error('Car break audio failed to load.', error))
+const heartbeatSoundUrl = new URL('./assets/sounds/freesound_community-heart-beating-128bpm-38384.mp3', import.meta.url).href
+const heartbeatSoundReady = fetch(heartbeatSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => {
+    heartbeatSoundBuffer = buffer
+    const peaks = detectHeartbeatPeaks(buffer)
+    if (peaks.length >= 2) {
+      heartbeatFearLoopStart = Math.max(0, peaks[0] - 0.45)
+      heartbeatFearLoopEnd = Math.min(buffer.duration, peaks[1] + 0.45)
+    } else {
+      heartbeatFearLoopStart = 0
+      heartbeatFearLoopEnd = buffer.duration
+    }
+  })
+  .catch((error: unknown) => console.error('Heartbeat audio failed to load.', error))
+const reloadSoundUrl = new URL('./assets/sounds/freesound_community-9mm-pistol-load-and-chamber-98830.mp3', import.meta.url).href
+const reloadSoundReady = fetch(reloadSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => { reloadSoundBuffer = buffer })
+  .catch((error: unknown) => console.error('Reload audio failed to load.', error))
+const dryFireSoundUrl = new URL('./assets/sounds/spinopel-dry-fire-364846.mp3', import.meta.url).href
+const dryFireSoundReady = fetch(dryFireSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => { dryFireSoundBuffer = buffer })
+  .catch((error: unknown) => console.error('Dry fire audio failed to load.', error))
 const trueCarSoundUrl = new URL('./assets/sounds/universfield-car-horn-02-153260.mp3', import.meta.url).href
 void fetch(trueCarSoundUrl)
   .then((response) => response.arrayBuffer())
@@ -2398,7 +2457,7 @@ function applyWeaponSelection(): void {
 }
 
 function playGunshot(): void {
-  if (!gunshotBuffer || !hitSoundEnabled) return
+  if (!gunshotBuffer) return
   const startGunshot = (): void => {
     const source = gunshotAudioContext.createBufferSource()
     const gain = gunshotAudioContext.createGain()
@@ -2412,8 +2471,52 @@ function playGunshot(): void {
   else void gunshotAudioContext.resume().then(startGunshot).catch((error: unknown) => console.error('Gunshot audio playback failed.', error))
 }
 
+function playDryFire(): void {
+  if (!dryFireSoundBuffer) return
+  const source = gunshotAudioContext.createBufferSource()
+  const gain = gunshotAudioContext.createGain()
+  source.buffer = dryFireSoundBuffer
+  gain.gain.value = soundVolumeMultiplier
+  source.connect(gain)
+  gain.connect(gunshotAudioContext.destination)
+  source.start()
+}
+
+function startWeaponReload(): void {
+  if (weaponReloading || !weaponPickupCollected || trueCarEntered) return
+  weaponReloading = true
+  setAiming(false)
+  const beginReload = (): void => {
+    if (!reloadSoundBuffer) return
+    camera.getWorldPosition(cameraOrigin)
+    alertMatryoshkasToSound(cameraOrigin)
+    weaponReloadDuration = reloadSoundBuffer.duration
+    weaponReloadStartedAt = gunshotAudioContext.currentTime
+    const source = gunshotAudioContext.createBufferSource()
+    const gain = gunshotAudioContext.createGain()
+    source.buffer = reloadSoundBuffer
+    gain.gain.value = soundVolumeMultiplier
+    source.connect(gain)
+    gain.connect(gunshotAudioContext.destination)
+    source.onended = () => {
+      weaponAmmo = weaponMagazineSize
+      weaponReloading = false
+      weaponReloadStartedAt = -Infinity
+    }
+    source.start()
+  }
+  const readyToReload = reloadSoundBuffer ? Promise.resolve() : reloadSoundReady
+  void readyToReload.then(() => {
+    if (gunshotAudioContext.state === 'running') beginReload()
+    else return gunshotAudioContext.resume().then(beginReload)
+  }).catch((error: unknown) => {
+    weaponReloading = false
+    console.error('Reload audio playback failed.', error)
+  })
+}
+
 function playKnockSound(onEnded?: () => void): void {
-  if (!knockSoundBuffer || !hitSoundEnabled) return
+  if (!knockSoundBuffer) return
   const startKnock = (): void => {
     if (!knockSoundBuffer) return
     const source = gunshotAudioContext.createBufferSource()
@@ -2451,8 +2554,28 @@ function detectCarBreakPeaks(buffer: AudioBuffer): number[] {
   return peaks.sort((first, second) => first - second)
 }
 
+function detectHeartbeatPeaks(buffer: AudioBuffer): number[] {
+  const samples = buffer.getChannelData(0)
+  const windowSize = Math.max(1, Math.floor(buffer.sampleRate * 0.01))
+  const envelope: number[] = []
+  for (let offset = 0; offset < samples.length; offset += windowSize) {
+    let energy = 0
+    const end = Math.min(samples.length, offset + windowSize)
+    for (let index = offset; index < end; index += 1) energy += samples[index] ** 2
+    envelope.push(Math.sqrt(energy / Math.max(1, end - offset)))
+  }
+  const peakThreshold = Math.max(...envelope, 0) * 0.25
+  const peaks: number[] = []
+  for (let index = 1; index < envelope.length - 1; index += 1) {
+    if (envelope[index] < peakThreshold || envelope[index] < envelope[index - 1] || envelope[index] < envelope[index + 1]) continue
+    const time = index * 0.01
+    if (peaks.every((peak) => time - peak >= 0.18)) peaks.push(time)
+  }
+  return peaks.slice(0, 2)
+}
+
 function playCarBreakSound(): void {
-  if (!carBreakSoundBuffer || !hitSoundEnabled) return
+  if (!carBreakSoundBuffer) return
   const startCarBreak = (): void => {
     if (!carBreakSoundBuffer) return
     const source = gunshotAudioContext.createBufferSource()
@@ -2466,6 +2589,45 @@ function playCarBreakSound(): void {
   }
   if (gunshotAudioContext.state === 'running') startCarBreak()
   else void gunshotAudioContext.resume().then(startCarBreak).catch((error: unknown) => console.error('Car break audio playback failed.', error))
+}
+
+function playHeartbeatSound(): void {
+  if (!heartbeatSoundBuffer || heartbeatSoundSource) return
+  const startHeartbeat = (): void => {
+    if (!heartbeatSoundBuffer || heartbeatSoundSource) return
+    const source = gunshotAudioContext.createBufferSource()
+    const gain = gunshotAudioContext.createGain()
+    source.buffer = heartbeatSoundBuffer
+    source.loop = true
+    source.loopStart = fearActive ? heartbeatFearLoopStart : 0
+    source.loopEnd = fearActive ? heartbeatFearLoopEnd : heartbeatSoundBuffer.duration
+    source.playbackRate.value = 1
+    gain.gain.value = soundVolumeMultiplier * 2
+    source.connect(gain)
+    gain.connect(gunshotAudioContext.destination)
+    source.onended = () => {
+      if (heartbeatSoundSource === source) heartbeatSoundSource = null
+    }
+    heartbeatSoundSource = source
+    heartbeatSoundGain = gain
+    source.start()
+  }
+  if (gunshotAudioContext.state === 'running') startHeartbeat()
+  else void gunshotAudioContext.resume().then(startHeartbeat).catch((error: unknown) => console.error('Heartbeat audio playback failed.', error))
+}
+
+function updateHeartbeatPlaybackRate(): void {
+  if (!heartbeatSoundSource) return
+  heartbeatSoundSource.loopStart = fearActive ? heartbeatFearLoopStart : 0
+  heartbeatSoundSource.loopEnd = fearActive ? heartbeatFearLoopEnd : heartbeatSoundBuffer?.duration ?? heartbeatFearLoopEnd
+}
+
+function stopHeartbeatSound(): void {
+  if (!heartbeatSoundSource) return
+  heartbeatSoundSource.stop()
+  heartbeatSoundSource.disconnect()
+  heartbeatSoundSource = null
+  heartbeatSoundGain = null
 }
 
 function warmGunshotAudio(): void {
@@ -2534,9 +2696,10 @@ function playTrueCarSound(): void {
   source.start()
 }
 
-gunshotVolumeSetting.addEventListener('input', () => {
-  soundVolumeMultiplier = Number(gunshotVolumeSetting.value) / 100
-  gunshotVolumeValue.value = `${gunshotVolumeSetting.value}%`
+masterVolumeSetting.addEventListener('input', () => {
+  soundVolumeMultiplier = Number(masterVolumeSetting.value) / 100
+  masterVolumeValue.value = `${masterVolumeSetting.value}%`
+  if (heartbeatSoundGain) heartbeatSoundGain.gain.value = soundVolumeMultiplier * 2
 })
 
 function getMuzzleWorldPosition(): THREE.Vector3 {
@@ -2631,7 +2794,7 @@ function updatePointerSensitivity(): void {
 }
 
 function handlePointerDown(event: PointerEvent): void {
-  if (event.button === 0 && controls.isLocked && !trueCarEntered) {
+  if (event.button === 0 && controls.isLocked && !trueCarEntered && weaponPickupCollected && !weaponReloading) {
     event.preventDefault()
     if (waypointEditSetting.checked) {
       addMatryoshkaWaypointFromAim()
@@ -2644,7 +2807,7 @@ function handlePointerDown(event: PointerEvent): void {
 }
 
 function handleMouseDown(event: MouseEvent): void {
-  if (event.button === 0 && controls.isLocked && !trueCarEntered && !leftButtonHeld) {
+  if (event.button === 0 && controls.isLocked && !trueCarEntered && weaponPickupCollected && !weaponReloading && !leftButtonHeld) {
     event.preventDefault()
     if (waypointEditSetting.checked) {
       addMatryoshkaWaypointFromAim()
@@ -2938,7 +3101,7 @@ const direction = new THREE.Vector3()
 const playerHeight = 3.4
 const gravity = 18
 const jumpVelocity = 5.5
-const keyPickupDistance = 7
+const keyPickupDistance = 4
 const keyPickupWorldPosition = new THREE.Vector3()
 const keyPickupLookDirection = new THREE.Vector3()
 const keyPickupToPlayerDirection = new THREE.Vector3()
@@ -2963,6 +3126,9 @@ const driverSeatViewDistance = 10
 const driverSeatInitialView = new THREE.Vector3(-1, 0, 0)
 const trueCarInteractionDistance = 4.5
 const trueCarInteractionAngle = 45
+const weaponPickupDistance = 4
+const weaponPickupWorldPosition = new THREE.Vector3()
+const weaponPickupToPlayerDirection = new THREE.Vector3()
 let verticalVelocity = 0
 let isGrounded = false
 
@@ -2983,8 +3149,49 @@ function isKeyWithinPickupRange(): boolean {
 
 function updateKeyInteractionPrompt(): void {
   keyPickupPrompt.hidden = !isKeyWithinPickupRange()
+  weaponPickupPrompt.hidden = !isWeaponWithinPickupRange()
   vehicleSearchHint.hidden = !keyPickupCollected
   trueCarPrompt.hidden = !isTrueCarWithinInteractionRange()
+}
+
+function isWeaponWithinPickupRange(): boolean {
+  if (!controls.isLocked || !weaponPickupObject || weaponPickupCollected || !weaponPickupObject.visible) return false
+  weaponPickupObject.getWorldPosition(weaponPickupWorldPosition)
+  if (camera.position.distanceTo(weaponPickupWorldPosition) > weaponPickupDistance) return false
+  camera.getWorldDirection(keyPickupLookDirection)
+  weaponPickupToPlayerDirection.copy(weaponPickupWorldPosition).sub(camera.position).normalize()
+  return keyPickupLookDirection.dot(weaponPickupToPlayerDirection) >= Math.cos(THREE.MathUtils.degToRad(40))
+}
+
+function collectWeaponPickup(): void {
+  if (!isWeaponWithinPickupRange() || !weaponPickupObject) return
+  weaponPickupCollected = true
+  weaponPickupObject.visible = false
+  weapon.visible = true
+  weaponPickupPrompt.hidden = true
+}
+
+function placeWeaponPickupWhenReady(): void {
+  if (!weaponPickupObject) return
+  if (!parkedCarsReady || !parkingLotRoot) {
+    requestAnimationFrame(placeWeaponPickupWhenReady)
+    return
+  }
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const angle = Math.random() * Math.PI * 2
+    const distance = THREE.MathUtils.randFloat(3, 8)
+    const x = camera.position.x + Math.cos(angle) * distance
+    const z = camera.position.z + Math.sin(angle) * distance
+    if (parkingBounds && (x < parkingBounds.min.x + 1 || x > parkingBounds.max.x - 1 || z < parkingBounds.min.z + 1 || z > parkingBounds.max.z - 1)) continue
+    if (overlapsMatryoshkaVehicleObstacle(x, z, matryoshkaObstaclePadding)) continue
+    const ground = getMatryoshkaGroundHit(x, z)
+    if (!ground) continue
+    weaponPickupObject.position.set(x, ground.point.y + 0.35, z)
+    weaponPickupObject.rotation.set(0, Math.random() * Math.PI * 2, Math.PI / 2)
+    scene.add(weaponPickupObject)
+    return
+  }
+  requestAnimationFrame(placeWeaponPickupWhenReady)
 }
 
 function collectKeyPickup(): void {
@@ -3134,12 +3341,17 @@ function handleKeyDown(event: KeyboardEvent): void {
     return
   }
   if (event.code === 'KeyF') {
-    if (keyPickupCollected) enterTrueCar()
+    if (isWeaponWithinPickupRange()) collectWeaponPickup()
+    else if (keyPickupCollected) enterTrueCar()
     else collectKeyPickup()
     return
   }
   if (event.code === 'KeyP') {
     if (controls.isLocked && keyPickupCollected && !trueCarEntered) playTrueCarSound()
+    return
+  }
+  if (event.code === 'KeyR') {
+    if (controls.isLocked) startWeaponReload()
     return
   }
   keys.add(event.code)
@@ -3171,6 +3383,8 @@ function showMenuView(view: 'home' | 'mode' | 'settings'): void {
 function openMenu(): void {
   if (playerDeathActive) return
   if (controls.isLocked) controls.unlock()
+  if (gunshotAudioContext.state === 'running') void gunshotAudioContext.suspend()
+  stopHeartbeatSound()
   showMenuView('home')
   settingsOverlay.classList.add('is-open')
   settingsOverlay.setAttribute('aria-hidden', 'false')
@@ -3184,6 +3398,10 @@ function syncPauseMenu(): void {
   const isPointerLockedToGameCanvas = document.pointerLockElement === canvas
   const shouldShowPauseMenu = !isPointerLockedToGameCanvas
   if (shouldShowPauseMenu) showMenuView('home')
+  if (shouldShowPauseMenu) {
+    if (gunshotAudioContext.state === 'running') void gunshotAudioContext.suspend()
+    stopHeartbeatSound()
+  }
   settingsOverlay.classList.toggle('is-open', shouldShowPauseMenu)
   settingsOverlay.setAttribute('aria-hidden', shouldShowPauseMenu ? 'false' : 'true')
 }
@@ -3197,6 +3415,8 @@ function enterGame(): void {
   startScreen.classList.remove('is-visible')
   closeMenu()
   lockPointer()
+  if (gunshotAudioContext.state === 'suspended') void gunshotAudioContext.resume()
+  void heartbeatSoundReady.then(playHeartbeatSound)
 }
 
 startPlayButton.addEventListener('click', enterGame)
@@ -3902,7 +4122,12 @@ function createImpactSpark(position: THREE.Vector3, normal: THREE.Vector3, incom
 }
 
 function fireShot(): void {
-  if (trueCarEntered) return
+  if (trueCarEntered || !weaponPickupCollected || weaponReloading) return
+  if (weaponAmmo <= 0) {
+    void dryFireSoundReady.then(playDryFire)
+    return
+  }
+  weaponAmmo -= 1
   playGunshot()
   applyRecoil()
   shotOrigin.copy(getMuzzleWorldPosition())
@@ -3971,7 +4196,7 @@ function render(): void {
     direction.set(Number(keys.has('KeyD')) - Number(keys.has('KeyA')), 0, Number(keys.has('KeyW')) - Number(keys.has('KeyS')))
     if (direction.lengthSq() > 0) {
       direction.normalize()
-      const isRunning = keys.has('KeyW') && (keys.has('ShiftLeft') || keys.has('ShiftRight'))
+      const isRunning = keys.has('KeyW') && !weaponReloading && (keys.has('ShiftLeft') || keys.has('ShiftRight'))
       movement.copy(direction).multiplyScalar((isRunning ? playerRunSpeed : playerWalkSpeed) * delta)
       movePlayerWithCollision(movement)
     }
@@ -4002,7 +4227,7 @@ function render(): void {
   updateTrueCarSoundIndicator()
 
   const isMoving = controls.isLocked && direction.lengthSq() > 0
-  const isRunning = isMoving && keys.has('KeyW') && (keys.has('ShiftLeft') || keys.has('ShiftRight'))
+  const isRunning = isMoving && keys.has('KeyW') && !weaponReloading && (keys.has('ShiftLeft') || keys.has('ShiftRight'))
   if (isRunning) {
     playRunningSound()
     if (elapsed - lastFootstepSoundAt >= 0.18) {
@@ -4059,6 +4284,12 @@ function render(): void {
     weaponRotation.y,
     weaponRotation.z,
   )
+  if (weaponReloading) {
+    const reloadProgress = THREE.MathUtils.clamp((gunshotAudioContext.currentTime - weaponReloadStartedAt) / weaponReloadDuration, 0, 1)
+    const reloadDip = Math.sin(reloadProgress * Math.PI)
+    weapon.position.y -= reloadDip * 0.9
+    weapon.rotation.y += reloadDip * 1.15
+  }
   if (recoilMode === 'recover') recoilPitch *= Math.exp(-9 * delta)
   weaponRecoilPitch *= Math.exp(-16 * delta)
 
