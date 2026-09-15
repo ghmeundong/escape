@@ -53,7 +53,7 @@ app.innerHTML = `
             <nav class="settings-nav" aria-label="Settings categories"><button class="settings-category is-active" data-category="display" type="button">DISPLAY &amp; GRAPHICS</button><button class="settings-category" data-category="weapon" type="button">WEAPON &amp; BALLISTICS</button><button class="settings-category" data-category="controls" type="button">MOUSE &amp; CONTROLS</button><button class="settings-category" data-category="crosshair" type="button">CROSSHAIR</button><button class="settings-category" data-category="targets" type="button">TARGETS &amp; ENVIRONMENT</button><button class="settings-category" data-category="sound" type="button">SOUND</button></nav>
             <div class="settings-category-content">
               <section class="settings-group settings-panel-group is-visible" data-category-panel="display"><h2>DISPLAY &amp; GRAPHICS</h2><label>RENDER DISTANCE <output id="render-distance-value">600</output><input id="render-distance-setting" type="range" min="100" max="600" step="10" value="600"></label><label>FOV <output id="fov-value">65</output><input id="fov-setting" type="range" min="45" max="103" step="1" value="65"></label><label>RESOLUTION SCALE <output id="resolution-scale-value">100%</output><input id="resolution-scale-setting" type="range" min="50" max="150" step="5" value="100"></label><label>MAX FPS <select id="max-fps-setting"><option value="0">UNLIMITED</option><option value="60">60</option><option value="144">144</option><option value="240">240</option></select></label><label class="toggle-row">ANTI-ALIASING <input id="antialiasing-setting" type="checkbox" checked></label></section>
-              <section class="settings-group settings-panel-group" data-category-panel="weapon"><h2>WEAPON &amp; BALLISTICS</h2><div class="weapon-preview"><h2>CURRENT WEAPON</h2><canvas id="weapon-preview-canvas" aria-label="Current weapon preview"></canvas><strong id="current-weapon-name">COLT 1911</strong></div><label>WEAPON <select id="weapon-setting"><option value="pistol">PISTOL</option></select></label><label>HITSCAN / PROJECTILE <select id="fire-mode-setting"><option value="projectile">PROJECTILE</option><option value="hitscan">HITSCAN</option></select></label><label>BULLET SPEED <output id="bullet-speed-value">253</output><input id="bullet-speed-setting" type="range" min="50" max="500" step="1" value="253"></label><label>RECOIL <output id="recoil-value">50%</output><input id="recoil-setting" type="range" min="0" max="100" value="50"></label><label>SPREAD <output id="spread-value">50%</output><input id="spread-setting" type="range" min="0" max="150" value="50"></label><label>MOVEMENT SPREAD <output id="movement-spread-value">225%</output><input id="movement-spread-setting" type="range" min="100" max="500" value="225"></label><label>AIM JUMP SPREAD <output id="aiming-jump-spread-value">550%</output><input id="aiming-jump-spread-setting" type="range" min="100" max="800" value="550"></label><label>HIPFIRE JUMP SPREAD <output id="hipfire-jump-spread-value">450%</output><input id="hipfire-jump-spread-setting" type="range" min="100" max="800" value="450"></label><label>BULLET DROP <output id="bullet-drop-value">100%</output><input id="bullet-drop-setting" type="range" min="0" max="200" value="100"></label></section>
+              <section class="settings-group settings-panel-group" data-category-panel="weapon"><h2>WEAPON &amp; BALLISTICS</h2><div class="weapon-preview"><h2>CURRENT WEAPON</h2><canvas id="weapon-preview-canvas" aria-label="Current weapon preview"></canvas><strong id="current-weapon-name">COLT 1911</strong></div><label>WEAPON <select id="weapon-setting"><option value="pistol">PISTOL</option></select></label><label>BULLET SPEED <output id="bullet-speed-value">253</output><input id="bullet-speed-setting" type="range" min="50" max="500" step="1" value="253"></label><label>RECOIL <output id="recoil-value">50%</output><input id="recoil-setting" type="range" min="0" max="100" value="50"></label><label>SPREAD <output id="spread-value">50%</output><input id="spread-setting" type="range" min="0" max="150" value="50"></label><label>MOVEMENT SPREAD <output id="movement-spread-value">225%</output><input id="movement-spread-setting" type="range" min="100" max="500" value="225"></label><label>AIM JUMP SPREAD <output id="aiming-jump-spread-value">550%</output><input id="aiming-jump-spread-setting" type="range" min="100" max="800" value="550"></label><label>HIPFIRE JUMP SPREAD <output id="hipfire-jump-spread-value">450%</output><input id="hipfire-jump-spread-setting" type="range" min="100" max="800" value="450"></label><label>BULLET DROP <output id="bullet-drop-value">100%</output><input id="bullet-drop-setting" type="range" min="0" max="200" value="100"></label></section>
               <section class="settings-group settings-panel-group" data-category-panel="controls"><h2>MOUSE &amp; CONTROLS</h2><label>SENSITIVITY <output id="settings-sensitivity-value">0.70</output><input id="settings-sensitivity" type="range" min="0.2" max="1.5" step="0.05" value="0.7"></label><label>DPI MULTIPLIER <output id="dpi-value">800</output><input id="dpi-setting" type="range" min="100" max="3200" step="100" value="800"></label><label>ADS RATIO <output id="ads-ratio-value">1.00</output><input id="ads-ratio-setting" type="range" min="0.1" max="2" step="0.05" value="1"></label><label>ADS FOV <output id="ads-fov-value">48</output><input id="ads-fov-setting" type="range" min="30" max="65" step="1" value="48"></label><label class="toggle-row">RAW INPUT <input id="raw-input-setting" type="checkbox" checked></label></section>
               <section class="settings-group settings-panel-group" data-category-panel="crosshair"><h2>CROSSHAIR</h2><label>STYLE <select id="crosshair-style-setting"><option>DOT + CROSS</option><option>DOT</option><option>CROSS</option><option>CIRCLE</option></select></label><label>COLOR <input id="crosshair-color-setting" type="color" value="#ffffff"></label><label>GAP <output id="crosshair-gap-value">14px</output><input id="crosshair-gap-setting" type="range" min="0" max="30" value="14"></label><label>LENGTH <output id="crosshair-length-value">8px</output><input id="crosshair-length-setting" type="range" min="2" max="24" value="8"></label><label>THICKNESS <output id="crosshair-thickness-value">1px</output><input id="crosshair-thickness-setting" type="range" min="1" max="5" value="1"></label><label>DOT SIZE <output id="crosshair-dot-size-value">5px</output><input id="crosshair-dot-size-setting" type="range" min="1" max="12" value="5"></label><label>CIRCLE SIZE <output id="crosshair-circle-size-value">30px</output><input id="crosshair-circle-size-setting" type="range" min="8" max="58" value="30"></label><label>OPACITY <output id="crosshair-opacity-value">90%</output><input id="crosshair-opacity-setting" type="range" min="10" max="100" value="90"></label><label>OUTLINE COLOR <input id="crosshair-outline-color-setting" type="color" value="#000000"></label><label>OUTLINE THICKNESS <output id="crosshair-outline-thickness-value">0px</output><input id="crosshair-outline-thickness-setting" type="range" min="0" max="4" value="0"></label><label class="toggle-row">DYNAMIC RESPONSE <input id="crosshair-dynamic-setting" type="checkbox" checked></label><label>DYNAMIC STRENGTH <output id="crosshair-dynamic-strength-value">100%</output><input id="crosshair-dynamic-strength-setting" type="range" min="0" max="200" value="100"></label><h2>HIT MARKER</h2><label>COLOR <input id="hit-marker-color-setting" type="color" value="#67d68b"></label><label>SIZE <output id="hit-marker-size-value">36px</output><input id="hit-marker-size-setting" type="range" min="16" max="72" value="36"></label><label>LENGTH <output id="hit-marker-length-value">9px</output><input id="hit-marker-length-setting" type="range" min="3" max="24" value="9"></label><label>THICKNESS <output id="hit-marker-thickness-value">1px</output><input id="hit-marker-thickness-setting" type="range" min="1" max="5" value="1"></label><label>GAP <output id="hit-marker-gap-value">10px</output><input id="hit-marker-gap-setting" type="range" min="4" max="24" value="10"></label><label>FADE TIME <output id="hit-marker-duration-value">0.22s</output><input id="hit-marker-duration-setting" type="range" min="0.05" max="1" step="0.01" value="0.22"></label></section>
               <section class="settings-group settings-panel-group" data-category-panel="targets"><h2>TARGETS &amp; ENVIRONMENT</h2><label>BACKGROUND <input id="background-color-setting" type="color" value="#0b0e12"></label><label>FLOOR <input id="floor-color-setting" type="color" value="#171d24"></label><label>GRID <input id="grid-color-setting" type="color" value="#33404a"></label><label>TARGET <input id="target-color-setting" type="color" value="#e33f32"></label><label>TARGET SIZE <output id="target-size-value">100%</output><input id="target-size-setting" type="range" min="50" max="150" value="100"></label><label>TRACKING SPEED <output id="tracking-speed-value">4.0</output><input id="tracking-speed-setting" type="range" min="1" max="10" step="0.5" value="4"></label><label>FALLING HORIZONTAL FORCE <output id="falling-horizontal-force-value">3.4</output><input id="falling-horizontal-force-setting" type="range" min="0" max="8" step="0.1" value="3.4"></label><label>FALLING LAUNCH <output id="falling-launch-value">12.0</output><input id="falling-launch-setting" type="range" min="0" max="20" step="0.5" value="12"></label><label>FALLING GRAVITY <output id="falling-gravity-value">18.0</output><input id="falling-gravity-setting" type="range" min="1" max="36" step="0.5" value="18"></label><label>FALLING RESPAWN DELAY <output id="falling-respawn-delay-value">0.60s</output><input id="falling-respawn-delay-setting" type="range" min="0.1" max="2" step="0.05" value="0.6"></label></section>
@@ -191,7 +191,6 @@ const resolutionScaleSetting = document.querySelector<HTMLInputElement>('#resolu
 const resolutionScaleValue = document.querySelector<HTMLOutputElement>('#resolution-scale-value')!
 const antialiasingSetting = document.querySelector<HTMLInputElement>('#antialiasing-setting')!
 const maxFpsSetting = document.querySelector<HTMLSelectElement>('#max-fps-setting')!
-const fireModeSetting = document.querySelector<HTMLSelectElement>('#fire-mode-setting')!
 const weaponSetting = document.querySelector<HTMLSelectElement>('#weapon-setting')!
 const currentWeaponName = document.querySelector<HTMLElement>('#current-weapon-name')!
 currentWeaponName.textContent = 'M1911'
@@ -383,7 +382,6 @@ type ShootingMode = 'microshot' | 'flickshot' | 'gridshot' | 'reflexshot' | 'mic
 type WeaponId = 'pistol'
 type RecoilMode = 'recover' | 'sustained'
 type WeaponProfile = {
-  fireMode: 'projectile' | 'hitscan'
   bulletSpeed: number
   recoil: number
   spread: number
@@ -395,12 +393,11 @@ type WeaponProfile = {
   recoilMode: RecoilMode
 }
 const weaponProfiles: Record<WeaponId, WeaponProfile> = {
-  pistol: { fireMode: 'projectile', bulletSpeed: 253, recoil: 50, spread: 75, movementSpread: 235, aimingJumpSpread: 350, hipfireJumpSpread: 250, bulletDrop: 100, fireDelay: 0, recoilMode: 'recover' },
+  pistol: { bulletSpeed: 253, recoil: 50, spread: 75, movementSpread: 235, aimingJumpSpread: 350, hipfireJumpSpread: 250, bulletDrop: 100, fireDelay: 0, recoilMode: 'recover' },
 }
 let shootingMode: ShootingMode = 'flickshot'
 let weaponSelection: 'auto' | WeaponId = 'auto'
 let activeWeapon: WeaponId = 'pistol'
-let fireMode: 'projectile' | 'hitscan' = 'projectile'
 let recoilMode: RecoilMode = 'recover'
 let recoilMultiplier = 1
 let spreadMultiplier = 1
@@ -423,14 +420,6 @@ let adsSensitivityRatio = 1
 let adsFov = 48
 let resolutionScale = 1
 let rawInputEnabled = true
-
-function updateBallisticControlState(): void {
-  const hitscanSelected = fireMode === 'hitscan'
-  bulletSpeedSetting.disabled = hitscanSelected
-  bulletDropSetting.disabled = hitscanSelected
-  bulletSpeedSetting.closest('label')?.classList.toggle('is-disabled', hitscanSelected)
-  bulletDropSetting.closest('label')?.classList.toggle('is-disabled', hitscanSelected)
-}
 
 const settingsStorageKey = 'escape-settings-v1'
 let restoringSettings = false
@@ -495,11 +484,23 @@ let trueCar: THREE.Object3D | null = null
 let trueCarEntered = false
 let trueCarSoundPlaying = false
 type MatryoshkaMobState = 'wander' | 'investigate' | 'chase'
+type MatryoshkaSoundSource = 'player' | 'car'
 type MatryoshkaMob = {
   object: THREE.Object3D
   state: MatryoshkaMobState
+  soundSource: MatryoshkaSoundSource
+  isClone: boolean
+  patrolDestination: THREE.Vector3 | null
+  physicsBody: RAPIER.RigidBody
+  physicsOffsetY: number
   target: THREE.Vector3
   velocity: THREE.Vector3
+  stationaryTime: number
+  slideDirection: THREE.Vector3
+  slideDirectionUntil: number
+  knockedDownAt: number
+  knockdownBaseY: number
+  routeSide: number
   pathRefreshAt: number
   route: THREE.Vector3[]
   visionIndicator: THREE.LineLoop
@@ -521,6 +522,7 @@ const matryoshkaPatrolWaypoints = [
   new THREE.Vector3(-68.625, 0.015, 67.872),
   new THREE.Vector3(-36.869, 0.015, 67.121),
   new THREE.Vector3(3.986, 0.015, 69.305),
+  new THREE.Vector3(79.959, 12.642, -65.004),
 ]
 const matryoshkaDetectionRange = 34
 const matryoshkaSpeed = 7.65
@@ -532,14 +534,16 @@ const matryoshkaMinWanderDistance = 35
 const matryoshkaObstaclePadding = 0.3
 const playerWalkSpeed = 3.8
 const playerRunSpeed = 11.5
-let matryoshkaVehicleHeight = 6
+let matryoshkaVehicleHeight = 20
 const matryoshkaMobPosition = new THREE.Vector3()
 const matryoshkaPlayerPosition = new THREE.Vector3()
 const matryoshkaToPlayer = new THREE.Vector3()
 const matryoshkaMoveDirection = new THREE.Vector3()
 const matryoshkaRaycaster = new THREE.Raycaster()
 const matryoshkaSoundTarget = new THREE.Vector3()
+const matryoshkaCarSoundTarget = new THREE.Vector3()
 let matryoshkaSoundVersion = 0
+let matryoshkaCarSoundVersion = 0
 let lastFootstepSoundAt = -Infinity
 let playerDeathActive = false
 let playerDeathElapsed = 0
@@ -573,19 +577,19 @@ function exitApplication(): void {
 deathRetryButton.addEventListener('click', () => window.location.reload())
 deathExitButton.addEventListener('click', exitApplication)
 
-function getMatryoshkaGroundHit(x: number, z: number): THREE.Intersection | undefined {
+function getMatryoshkaGroundHit(x: number, z: number, maxGroundY = Infinity): THREE.Intersection | undefined {
   if (!parkingBounds || !parkingLotRoot) return undefined
   parkingGroundRaycaster.set(new THREE.Vector3(x, parkingBounds.max.y + 10, z), new THREE.Vector3(0, -1, 0))
   return parkingGroundRaycaster.intersectObject(parkingLotRoot, true).find((intersection) => {
-    if (intersection.point.y < parkingBounds!.min.y - 0.25 || intersection.point.y > parkingBounds!.min.y + matryoshkaVehicleHeight) return false
-    return Boolean(intersection.face && intersection.face.normal.clone().transformDirection(intersection.object.matrixWorld).y > 0.2)
+    if (intersection.point.y < parkingBounds!.min.y - 0.25 || intersection.point.y > maxGroundY) return false
+    return Boolean(intersection.face && intersection.face.normal.clone().transformDirection(intersection.object.matrixWorld).y > 0.08)
   })
 }
 
 function isMatryoshkaWaypointValid(x: number, z: number): boolean {
   if (!parkingBounds || !parkingLotRoot || overlapsMatryoshkaVehicleObstacle(x, z, matryoshkaObstaclePadding)) return false
   const hit = getMatryoshkaGroundHit(x, z)
-  return Boolean(hit?.face && hit.face.normal.clone().transformDirection(hit.object.matrixWorld).y > 0.2)
+  return Boolean(hit?.face && hit.face.normal.clone().transformDirection(hit.object.matrixWorld).y > 0.08)
 }
 
 function rebuildMatryoshkaWaypoints(): void {
@@ -668,7 +672,7 @@ function getMatryoshkaFreeRoamTarget(origin: THREE.Vector3): THREE.Vector3 | nul
     const x = THREE.MathUtils.randFloat(parkingBounds.min.x + 1.5, parkingBounds.max.x - 1.5)
     const z = THREE.MathUtils.randFloat(parkingBounds.min.z + 1.5, parkingBounds.max.z - 1.5)
     if (overlapsMatryoshkaVehicleObstacle(x, z, matryoshkaObstaclePadding)) continue
-    const hit = getMatryoshkaGroundHit(x, z)
+    const hit = getMatryoshkaGroundHit(x, z, origin.y + 2.5)
     const candidate = hit ? new THREE.Vector3(x, hit.point.y + 0.02, z) : null
     if (candidate && candidate.distanceTo(origin) >= matryoshkaMinWanderDistance) return candidate
   }
@@ -693,12 +697,17 @@ function addMatryoshkaWaypointFromAim(): void {
   matryoshkaMobs.forEach((mob) => { mob.pathRefreshAt = 0 })
 }
 
-function alertMatryoshkasToSound(position: THREE.Vector3): void {
-  matryoshkaSoundTarget.copy(position)
-  matryoshkaSoundVersion += 1
+function alertMatryoshkasToSound(position: THREE.Vector3, source: MatryoshkaSoundSource = 'player'): void {
+  const soundTarget = source === 'player' ? matryoshkaSoundTarget : matryoshkaCarSoundTarget
+  if (source === 'player') matryoshkaSoundVersion += 1
+  else matryoshkaCarSoundVersion += 1
+  soundTarget.copy(position)
   matryoshkaMobs.forEach((mob) => {
-    if (mob.state === 'chase') return
+    if (source === 'car' && mob.state === 'chase') return
+    if (source === 'car' && mob.state === 'investigate' && mob.soundSource === 'player') return
+    if (source === 'player' && mob.state === 'investigate' && mob.soundSource === 'player') return
     mob.state = 'investigate'
+    mob.soundSource = source
     mob.heardSoundVersion = 0
     mob.route = []
     mob.pathRefreshAt = 0
@@ -773,11 +782,71 @@ function findMatryoshkaRoute(start: THREE.Vector3, end: THREE.Vector3, waypoints
   return route
 }
 
+function getMatryoshkaRouteDistance(start: THREE.Vector3, route: THREE.Vector3[]): number {
+  return route.reduce((distance, point, index) => distance + (index === 0 ? start.distanceTo(point) : route[index - 1].distanceTo(point)), 0)
+}
+
+function getMatryoshkaRouteOverlapScore(mob: MatryoshkaMob, route: THREE.Vector3[]): number {
+  let overlappingMobCount = 0
+  for (const otherMob of matryoshkaMobs) {
+    if (otherMob === mob || otherMob.knockedDownAt > 0 || otherMob.route.length === 0) continue
+    const overlapsRoute = route.some((point) => otherMob.route.some((otherPoint) => point.distanceToSquared(otherPoint) < 25))
+    if (overlapsRoute) overlappingMobCount += 1
+  }
+  if (overlappingMobCount <= 1) return overlappingMobCount * 8
+  return 100 + (overlappingMobCount - 2) * 100
+}
+
+function findMatryoshkaNonOverlappingRoute(mob: MatryoshkaMob, start: THREE.Vector3, end: THREE.Vector3, waypoints = matryoshkaWaypoints): THREE.Vector3[] {
+  const candidateRoutes: THREE.Vector3[][] = []
+  const baseRoute = findMatryoshkaRoute(start, end, waypoints)
+  if (baseRoute.length > 0) candidateRoutes.push(baseRoute)
+  for (const waypoint of waypoints) {
+    if (waypoint.distanceToSquared(start) < 64 || waypoint.distanceToSquared(end) < 64) continue
+    const routeToWaypoint = findMatryoshkaRoute(start, waypoint)
+    const routeFromWaypoint = findMatryoshkaRoute(waypoint, end)
+    if (routeToWaypoint.length === 0 || routeFromWaypoint.length === 0) continue
+    candidateRoutes.push([...routeToWaypoint, ...routeFromWaypoint.slice(1)])
+  }
+  candidateRoutes.sort((first, second) => {
+    const overlapDifference = getMatryoshkaRouteOverlapScore(mob, first) - getMatryoshkaRouteOverlapScore(mob, second)
+    const distanceDifference = getMatryoshkaRouteDistance(start, first) - getMatryoshkaRouteDistance(start, second)
+    return overlapDifference * 0.35 + distanceDifference * 0.04
+  })
+  return candidateRoutes[0] ?? baseRoute
+}
+
 function findMatryoshkaRecoveryRoute(start: THREE.Vector3): THREE.Vector3[] {
-  const destination = findNearestMatryoshkaWaypoint(start)
+  const recoveryCandidates = matryoshkaRecoveryWaypoints
+    .filter((waypoint) => waypoint.distanceToSquared(start) > 36)
+    .sort((first, second) => first.distanceToSquared(start) - second.distanceToSquared(start))
+  const destination = findNearestMatryoshkaWaypoint(start, recoveryCandidates)
   if (!destination) return []
-  const recoveryGraph = [...matryoshkaRecoveryWaypoints, ...matryoshkaWaypoints]
-  return findMatryoshkaRoute(start, destination, recoveryGraph)
+  return findMatryoshkaRoute(start, destination, matryoshkaRecoveryWaypoints)
+}
+
+function findMatryoshkaOpenDirection(mob: MatryoshkaMob, origin: THREE.Vector3): THREE.Vector3 | null {
+  const desired = matryoshkaMoveDirection.subVectors(mob.target, origin)
+  desired.y = 0
+  if (desired.lengthSq() < 0.01) desired.set(0, 0, 1)
+  desired.normalize()
+  let bestTarget: THREE.Vector3 | null = null
+  let bestScore = -Infinity
+  const probeDistance = 3.5
+  for (let index = 0; index < 8; index += 1) {
+    const angle = (index / 8) * Math.PI * 2
+    const direction = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle))
+    const x = origin.x + direction.x * probeDistance
+    const z = origin.z + direction.z * probeDistance
+    if (overlapsMatryoshkaVehicleObstacle(x, z, matryoshkaObstaclePadding)) continue
+    const ground = getMatryoshkaGroundHit(x, z)
+    if (!ground) continue
+    const score = direction.dot(desired) * 4 + ground.point.y * 0.01
+    if (score <= bestScore) continue
+    bestScore = score
+    bestTarget = new THREE.Vector3(x, ground.point.y, z)
+  }
+  return bestTarget
 }
 
 function getMatryoshkaSpawnPosition(): THREE.Vector3 | null {
@@ -846,36 +915,47 @@ function matryoshkaHasLineOfSight(mob: THREE.Object3D, player: THREE.Vector3): b
   return isMatryoshkaPathClear(mobGroundPosition, player, matryoshkaObstaclePadding)
 }
 
+function getMatryoshkaSeparatedTarget(mob: MatryoshkaMob, destination: THREE.Vector3): THREE.Vector3 {
+  const approachDirection = new THREE.Vector3(destination.x - matryoshkaMobPosition.x, 0, destination.z - matryoshkaMobPosition.z)
+  if (approachDirection.lengthSq() < 0.01) approachDirection.set(1, 0, 0)
+  approachDirection.normalize()
+  return destination.clone().add(new THREE.Vector3(-approachDirection.z, 0, approachDirection.x).multiplyScalar(mob.routeSide * 3))
+}
+
+function isMatryoshkaPatrolDestinationAvailable(mob: MatryoshkaMob, destination: THREE.Vector3): boolean {
+  return !matryoshkaMobs.some((otherMob) => otherMob !== mob && otherMob.state === 'wander' && otherMob.patrolDestination && otherMob.patrolDestination.distanceToSquared(destination) < 144)
+}
+
 function chooseMatryoshkaTarget(mob: MatryoshkaMob): void {
   mob.object.getWorldPosition(matryoshkaMobPosition)
-  if (mob.state === 'chase' && matryoshkaHasLineOfSight(mob.object, camera.position)) {
-    mob.route = [camera.position.clone()]
-    mob.target.copy(camera.position)
-    return
-  }
+  if (mob.state !== 'wander') mob.patrolDestination = null
+  const playerDistance = Math.hypot(camera.position.x - matryoshkaMobPosition.x, camera.position.z - matryoshkaMobPosition.z)
+  const chaseTarget = playerDistance < 4 ? camera.position.clone() : getMatryoshkaSeparatedTarget(mob, camera.position)
   if (mob.state === 'chase') {
-    mob.route = findMatryoshkaRoute(matryoshkaMobPosition, camera.position)
+    const chaseWaypoints = matryoshkaRecoveryWaypoints.length > 0 ? matryoshkaRecoveryWaypoints : matryoshkaWaypoints
+    mob.route = findMatryoshkaRoute(matryoshkaMobPosition, chaseTarget, chaseWaypoints)
     const nextWaypoint = mob.route[0]
     if (nextWaypoint) mob.target.copy(nextWaypoint)
     return
   }
   if (mob.state === 'investigate') {
-    mob.route = findMatryoshkaRoute(matryoshkaMobPosition, matryoshkaSoundTarget)
-    if (mob.route.length === 0) mob.route = [matryoshkaSoundTarget.clone()]
+    const soundTarget = (mob.soundSource === 'player' ? matryoshkaSoundTarget : matryoshkaCarSoundTarget).clone()
+    mob.route = findMatryoshkaNonOverlappingRoute(mob, matryoshkaMobPosition, soundTarget)
+    if (mob.route.length === 0) mob.route = [soundTarget.clone()]
     mob.target.copy(mob.route[0])
-    mob.heardSoundVersion = matryoshkaSoundVersion
+    mob.heardSoundVersion = mob.soundSource === 'player' ? matryoshkaSoundVersion : matryoshkaCarSoundVersion
     return
   }
   if (matryoshkaWaypoints.length === 0) return
   const candidates: THREE.Vector3[] = []
   for (let attempt = 0; attempt < 18; attempt += 1) {
     const candidate = getMatryoshkaFreeRoamTarget(matryoshkaMobPosition)
-    if (candidate) candidates.push(candidate)
+    if (candidate && isMatryoshkaPatrolDestinationAvailable(mob, candidate)) candidates.push(candidate)
   }
   let bestRoute: THREE.Vector3[] = []
   let bestDistance = 0
   for (const candidate of candidates) {
-    const route = findMatryoshkaRoute(matryoshkaMobPosition, candidate)
+    const route = findMatryoshkaNonOverlappingRoute(mob, matryoshkaMobPosition, candidate)
     const routeDistance = route.reduce((distance, point, index) => distance + (index === 0 ? matryoshkaMobPosition.distanceTo(point) : route[index - 1].distanceTo(point)), 0)
     if (routeDistance > bestDistance) {
       bestDistance = routeDistance
@@ -883,11 +963,129 @@ function chooseMatryoshkaTarget(mob: MatryoshkaMob): void {
     }
   }
   if (bestRoute.length === 0) {
-    const fallback = matryoshkaWaypoints.reduce((farthest, waypoint) => waypoint.distanceToSquared(matryoshkaMobPosition) > farthest.distanceToSquared(matryoshkaMobPosition) ? waypoint : farthest)
+    const availableWaypoints = matryoshkaWaypoints.filter((waypoint) => waypoint.distanceToSquared(matryoshkaMobPosition) > 36 && isMatryoshkaPatrolDestinationAvailable(mob, waypoint))
+    const fallback = (availableWaypoints.length > 0 ? availableWaypoints : matryoshkaWaypoints).reduce((farthest, waypoint) => waypoint.distanceToSquared(matryoshkaMobPosition) > farthest.distanceToSquared(matryoshkaMobPosition) ? waypoint : farthest)
     bestRoute = [fallback.clone()]
   }
   mob.route = bestRoute
   mob.target.copy(bestRoute[0])
+  mob.patrolDestination = bestRoute[bestRoute.length - 1].clone()
+}
+
+function ensureMatryoshkaWanderMovement(mob: MatryoshkaMob): void {
+  if (mob.state !== 'wander' || mob.route.length > 0) return
+  mob.object.getWorldPosition(matryoshkaMobPosition)
+  const nextWaypoint = matryoshkaWaypoints
+    .filter((waypoint) => waypoint.distanceToSquared(matryoshkaMobPosition) > 36 && isMatryoshkaPatrolDestinationAvailable(mob, waypoint))
+    .sort((first, second) => first.distanceToSquared(matryoshkaMobPosition) - second.distanceToSquared(matryoshkaMobPosition))[0]
+  if (!nextWaypoint) return
+  mob.route = [nextWaypoint.clone()]
+  mob.target.copy(nextWaypoint)
+  mob.patrolDestination = nextWaypoint.clone()
+}
+
+function knockDownMatryoshkaMob(mob: MatryoshkaMob, now: number, impactDirection?: THREE.Vector3): void {
+  if (mob.knockedDownAt > 0) return
+  mob.object.getWorldPosition(matryoshkaMobPosition)
+  mob.knockdownBaseY = mob.object.position.y
+  mob.knockedDownAt = now
+  mob.velocity.set(0, 0, 0)
+  mob.route = []
+  const direction = impactDirection?.clone().setY(0).normalize() ?? new THREE.Vector3(0, 0, 1)
+  mob.physicsBody.setGravityScale(gravityMultiplier, true)
+  mob.physicsBody.applyImpulse({ x: direction.x * 0.55, y: 0.8, z: direction.z * 0.55 }, true)
+  mob.physicsBody.applyTorqueImpulse({ x: direction.z * 0.18, y: 0.05, z: -direction.x * 0.18 }, true)
+}
+
+function createMatryoshkaClone(sourceMob: MatryoshkaMob): void {
+  const cloneObject = sourceMob.object.clone(true)
+  cloneObject.scale.multiplyScalar(0.8)
+  cloneObject.rotation.set(0, sourceMob.object.rotation.y, 0)
+  const candidateOffsets = [
+    new THREE.Vector3(4, 0, 0),
+    new THREE.Vector3(-4, 0, 0),
+    new THREE.Vector3(0, 0, 4),
+    new THREE.Vector3(0, 0, -4),
+  ]
+  let spawnPosition = sourceMob.object.position.clone()
+  for (const offset of candidateOffsets) {
+    const candidate = sourceMob.object.position.clone().add(offset)
+    if (overlapsMatryoshkaVehicleObstacle(candidate.x, candidate.z, matryoshkaObstaclePadding)) continue
+    if (matryoshkaMobs.some((mob) => mob !== sourceMob && mob.object.position.distanceToSquared(candidate) < 6.25)) continue
+    const ground = getMatryoshkaGroundHit(candidate.x, candidate.z)
+    if (!ground) continue
+    spawnPosition = new THREE.Vector3(candidate.x, ground.point.y, candidate.z)
+    break
+  }
+  cloneObject.position.set(spawnPosition.x, 0, spawnPosition.z)
+  cloneObject.updateMatrixWorld(true)
+  const cloneBounds = new THREE.Box3().setFromObject(cloneObject)
+  cloneObject.position.y = spawnPosition.y - cloneBounds.min.y
+  cloneObject.updateMatrixWorld(true)
+  const clonePhysics = createMatryoshkaPhysicsBody(cloneObject)
+  const hitbox = new THREE.Box3().setFromObject(cloneObject)
+  const hitboxHelper = new THREE.Box3Helper(hitbox, '#ff00ff')
+  hitboxHelper.visible = matryoshkaHitboxSetting.checked
+  hitboxHelper.renderOrder = 1006
+  const visionPoints = Array.from({ length: 160 }, (_, index) => {
+    const angle = (index / 160) * Math.PI * 2
+    return new THREE.Vector3(Math.cos(angle) * matryoshkaDetectionRange, 0, Math.sin(angle) * matryoshkaDetectionRange)
+  })
+  const visionIndicator = new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(visionPoints),
+    new THREE.LineBasicMaterial({ color: '#ff2020', transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false, toneMapped: false }),
+  )
+  visionIndicator.renderOrder = 1005
+  visionIndicator.frustumCulled = false
+  visionIndicator.visible = matryoshkaVisionSetting.checked
+  scene.add(cloneObject, visionIndicator, hitboxHelper)
+  const cloneMob: MatryoshkaMob = {
+    object: cloneObject,
+    state: sourceMob.state,
+    soundSource: sourceMob.soundSource,
+    isClone: true,
+    patrolDestination: null,
+    physicsBody: clonePhysics.body,
+    physicsOffsetY: clonePhysics.offsetY,
+    target: sourceMob.target.clone(),
+    velocity: new THREE.Vector3(),
+    stationaryTime: 0,
+    slideDirection: new THREE.Vector3(),
+    slideDirectionUntil: 0,
+    knockedDownAt: 0,
+    knockdownBaseY: cloneObject.position.y,
+    routeSide: -sourceMob.routeSide,
+    pathRefreshAt: 0,
+    route: [],
+    visionIndicator,
+    hitboxHelper,
+    heardSoundVersion: sourceMob.heardSoundVersion,
+  }
+  matryoshkaMobs.push(cloneMob)
+  chooseMatryoshkaTarget(cloneMob)
+}
+
+function recoverMatryoshkaMob(mob: MatryoshkaMob): void {
+  syncMatryoshkaFromPhysics(mob)
+  mob.physicsBody.setGravityScale(0, true)
+  mob.physicsBody.setLinvel({ x: 0, y: 0, z: 0 }, true)
+  mob.physicsBody.setAngvel({ x: 0, y: 0, z: 0 }, true)
+  mob.knockedDownAt = 0
+  mob.object.rotation.x = 0
+  mob.object.rotation.z = 0
+  mob.object.position.y = mob.knockdownBaseY
+  mob.object.updateMatrixWorld(true)
+  const uprightQuaternion = mob.object.quaternion.clone()
+  mob.physicsBody.setTranslation({
+    x: mob.object.position.x,
+    y: mob.object.position.y + mob.physicsOffsetY,
+    z: mob.object.position.z,
+  }, true)
+  mob.physicsBody.setRotation({ x: uprightQuaternion.x, y: uprightQuaternion.y, z: uprightQuaternion.z, w: uprightQuaternion.w }, true)
+  mob.stationaryTime = 0
+  mob.pathRefreshAt = 0
+  createMatryoshkaClone(mob)
+  chooseMatryoshkaTarget(mob)
 }
 
 function updateMatryoshkaMobs(now: number, delta: number): void {
@@ -899,52 +1097,96 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
   if (playerDeathActive) return
   let fearActive = false
   for (const mob of matryoshkaMobs) {
+    if (mob.knockedDownAt > 0) syncMatryoshkaFromPhysics(mob)
     mob.object.getWorldPosition(matryoshkaMobPosition)
+    if (mob.knockedDownAt > 0) {
+      if (now - mob.knockedDownAt >= 3) recoverMatryoshkaMob(mob)
+      else continue
+    }
+    const movementStart = matryoshkaMobPosition.clone()
     const fullMobBounds = new THREE.Box3().setFromObject(mob.object)
     const mobBoundsCenter = fullMobBounds.getCenter(new THREE.Vector3())
     const mobBoundsSize = fullMobBounds.getSize(new THREE.Vector3()).multiplyScalar(0.7)
     mob.hitboxHelper.box.setFromCenterAndSize(mobBoundsCenter, mobBoundsSize)
     mob.hitboxHelper.visible = matryoshkaHitboxSetting.checked
     mob.visionIndicator.position.set(matryoshkaMobPosition.x, matryoshkaMobPosition.y + 0.05, matryoshkaMobPosition.z)
-    if (mob.state === 'investigate' || mob.state === 'chase') fearActive = true
     if (Math.hypot(matryoshkaMobPosition.x - camera.position.x, matryoshkaMobPosition.z - camera.position.z) <= 1.35) {
       triggerPlayerDeath()
       return
     }
     const distanceToPlayer = matryoshkaMobPosition.distanceTo(camera.position)
     const playerVisible = distanceToPlayer <= matryoshkaDetectionRange && matryoshkaHasLineOfSight(mob.object, camera.position)
-    const reachedSound = mob.state === 'investigate' && mob.heardSoundVersion === matryoshkaSoundVersion && mob.target.distanceToSquared(matryoshkaMobPosition) < 4 && mob.route.length <= 1
+    const currentSoundVersion = mob.soundSource === 'player' ? matryoshkaSoundVersion : matryoshkaCarSoundVersion
+    const investigationTarget = mob.soundSource === 'player' ? matryoshkaSoundTarget : matryoshkaCarSoundTarget
+    const reachedSound = mob.state === 'investigate' && mob.heardSoundVersion === currentSoundVersion && investigationTarget.distanceToSquared(matryoshkaMobPosition) < 16
     // Visual contact always outranks an older gunshot or footstep target.
     const nextState: MatryoshkaMobState = playerVisible
       ? 'chase'
       : reachedSound
         ? 'wander'
-        : mob.state === 'investigate'
+          : mob.state === 'investigate'
           ? 'investigate'
           : 'wander'
     const previousState = mob.state
     if (nextState !== mob.state) {
       mob.state = nextState
-      mob.route = nextState === 'wander' && previousState !== 'wander' ? findMatryoshkaRecoveryRoute(matryoshkaMobPosition) : []
+      mob.route = []
+      if (nextState === 'wander' && previousState !== 'wander') {
+        mob.route = findMatryoshkaRecoveryRoute(matryoshkaMobPosition)
+        if (mob.route.length > 0) mob.target.copy(mob.route[0])
+        else chooseMatryoshkaTarget(mob)
+      }
       if (mob.route.length > 0) mob.target.copy(mob.route[0])
       mob.pathRefreshAt = 0
     }
-    if (mob.target.distanceToSquared(matryoshkaMobPosition) < 4 && mob.route.length > 1) {
+    if (nextState === 'chase' || (nextState === 'investigate' && mob.soundSource === 'player')) fearActive = true
+    const atInvestigationWaypoint = mob.state === 'investigate'
+      && mob.route.length === 1
+      && mob.target.distanceToSquared(matryoshkaMobPosition) < 4
+      && investigationTarget.distanceToSquared(matryoshkaMobPosition) >= 16
+    if (atInvestigationWaypoint) {
+      chooseMatryoshkaTarget(mob)
+      mob.pathRefreshAt = now + matryoshkaPathRefreshInterval
+    } else if (mob.target.distanceToSquared(matryoshkaMobPosition) < 4 && mob.route.length > 1) {
       mob.route.shift()
       mob.target.copy(mob.route[0])
       mob.pathRefreshAt = now + matryoshkaPathRefreshInterval
-    } else if (now >= mob.pathRefreshAt || mob.target.distanceToSquared(matryoshkaMobPosition) < 2 || (mob.state === 'investigate' && mob.heardSoundVersion !== matryoshkaSoundVersion)) {
+    } else if (mob.route.length === 0 || mob.target.distanceToSquared(matryoshkaMobPosition) < 2 || (mob.state !== 'investigate' && now >= mob.pathRefreshAt)) {
       chooseMatryoshkaTarget(mob)
       mob.pathRefreshAt = now + matryoshkaPathRefreshInterval
     }
+    ensureMatryoshkaWanderMovement(mob)
     matryoshkaMoveDirection.subVectors(mob.target, matryoshkaMobPosition)
     matryoshkaMoveDirection.y = 0
-    if (matryoshkaMoveDirection.lengthSq() < 0.01) continue
+    if (matryoshkaMoveDirection.lengthSq() < 0.01) {
+      groundMatryoshkaMob(mob)
+      syncMatryoshkaToPhysics(mob)
+      continue
+    }
     matryoshkaMoveDirection.normalize()
-    const speed = mob.state === 'chase' ? matryoshkaChaseSpeed : matryoshkaSpeed
+    const speed = (mob.state === 'chase' ? matryoshkaChaseSpeed : matryoshkaSpeed) * (mob.isClone ? 1.5 : 1)
     mob.velocity.lerp(matryoshkaMoveDirection.multiplyScalar(speed), 1 - Math.exp(-8 * delta))
-    moveMatryoshkaWithVehicleSlide(mob, delta)
+    moveMatryoshkaWithGroundSteps(mob, delta, now)
+    syncMatryoshkaToPhysics(mob)
     mob.object.rotation.y = Math.atan2(mob.velocity.x, mob.velocity.z) + matryoshkaModelYawOffset
+    mob.object.getWorldPosition(matryoshkaMobPosition)
+    const movedDistance = matryoshkaMobPosition.distanceTo(movementStart)
+    if (movedDistance < 0.01 && mob.velocity.lengthSq() > 0.25) mob.stationaryTime += delta
+    else mob.stationaryTime = 0
+    if (mob.stationaryTime >= 0.35) {
+      const escapeTarget = findMatryoshkaOpenDirection(mob, movementStart)
+      if (escapeTarget) {
+        mob.route = [escapeTarget]
+        mob.target.copy(escapeTarget)
+      } else {
+        const recoveryRoute = findMatryoshkaRecoveryRoute(movementStart)
+        mob.route = recoveryRoute
+        if (recoveryRoute.length > 0) mob.target.copy(recoveryRoute[0])
+      }
+      mob.velocity.set(0, 0, 0)
+      mob.stationaryTime = 0
+      mob.pathRefreshAt = now + matryoshkaPathRefreshInterval
+    }
   }
   fearOverlay.classList.toggle('is-visible', fearActive)
 }
@@ -981,6 +1223,7 @@ function spawnMatryoshkaMob(): void {
     fallbackSpawn.y = currentParkingBounds.min.y + 0.02
     const spawn = getMatryoshkaRampSpawnPosition() ?? getMatryoshkaSpawnPosition() ?? matryoshkaWaypoints[0]?.clone() ?? fallbackSpawn
     mobObject.position.set(spawn.x, spawn.y - scaledBounds.min.y, spawn.z)
+    const physics = createMatryoshkaPhysicsBody(mobObject)
     const matryoshkaHitbox = new THREE.Box3().setFromObject(mobObject)
     const matryoshkaHitboxHelper = new THREE.Box3Helper(matryoshkaHitbox, '#ff00ff')
     matryoshkaHitboxHelper.visible = matryoshkaHitboxSetting.checked
@@ -1000,8 +1243,19 @@ function spawnMatryoshkaMob(): void {
     const mob: MatryoshkaMob = {
       object: mobObject,
       state: 'wander',
+      soundSource: 'player',
+      isClone: false,
+      patrolDestination: null,
+      physicsBody: physics.body,
+      physicsOffsetY: physics.offsetY,
       target: new THREE.Vector3(),
       velocity: new THREE.Vector3(),
+      stationaryTime: 0,
+      slideDirection: new THREE.Vector3(),
+      slideDirectionUntil: 0,
+      knockedDownAt: 0,
+      knockdownBaseY: mobObject.position.y,
+      routeSide: matryoshkaMobs.length % 2 === 0 ? -1 : 1,
       pathRefreshAt: 0,
       route: [],
       visionIndicator,
@@ -1083,7 +1337,52 @@ function overlapsMatryoshkaVehicleObstacle(x: number, z: number, padding = matry
   return false
 }
 
-function moveMatryoshkaWithVehicleSlide(mob: MatryoshkaMob, delta: number): void {
+function getMatryoshkaVehicleContactAxis(currentX: number, currentZ: number, nextX: number, nextZ: number, padding: number): 'x' | 'z' | null {
+  let contactAxis: 'x' | 'z' | null = null
+  let closestFaceDistance = Infinity
+  for (const obstacle of matryoshkaVehicleObstacles) {
+    const minX = obstacle.min.x - padding
+    const maxX = obstacle.max.x + padding
+    const minZ = obstacle.min.z - padding
+    const maxZ = obstacle.max.z + padding
+    if (nextX <= minX || nextX >= maxX || nextZ <= minZ || nextZ >= maxZ) continue
+    const distanceToXFace = Math.min(Math.abs(currentX - minX), Math.abs(currentX - maxX))
+    const distanceToZFace = Math.min(Math.abs(currentZ - minZ), Math.abs(currentZ - maxZ))
+    const candidateAxis = distanceToXFace <= distanceToZFace ? 'x' : 'z'
+    const candidateDistance = candidateAxis === 'x' ? distanceToXFace : distanceToZFace
+    if (candidateDistance < closestFaceDistance) {
+      closestFaceDistance = candidateDistance
+      contactAxis = candidateAxis
+    }
+  }
+  return contactAxis
+}
+
+function separateMatryoshkaFromVehicleCorner(mob: MatryoshkaMob): boolean {
+  const x = mob.object.position.x
+  const z = mob.object.position.z
+  for (const obstacle of matryoshkaVehicleObstacles) {
+    const minX = obstacle.min.x - matryoshkaObstaclePadding
+    const maxX = obstacle.max.x + matryoshkaObstaclePadding
+    const minZ = obstacle.min.z - matryoshkaObstaclePadding
+    const maxZ = obstacle.max.z + matryoshkaObstaclePadding
+    if (x <= minX || x >= maxX || z <= minZ || z >= maxZ) continue
+    const pushLeft = x - minX
+    const pushRight = maxX - x
+    const pushFront = z - minZ
+    const pushBack = maxZ - z
+    const smallestPush = Math.min(pushLeft, pushRight, pushFront, pushBack)
+    if (smallestPush === pushLeft) mob.object.position.x = minX - 0.02
+    else if (smallestPush === pushRight) mob.object.position.x = maxX + 0.02
+    else if (smallestPush === pushFront) mob.object.position.z = minZ - 0.02
+    else mob.object.position.z = maxZ + 0.02
+    mob.velocity.set(0, 0, 0)
+    return true
+  }
+  return false
+}
+
+function moveMatryoshkaWithVehicleSlide(mob: MatryoshkaMob, delta: number, now: number): void {
   const stepX = mob.velocity.x * delta
   const stepZ = mob.velocity.z * delta
   const currentX = mob.object.position.x
@@ -1092,17 +1391,79 @@ function moveMatryoshkaWithVehicleSlide(mob: MatryoshkaMob, delta: number): void
   if (canMoveFull) {
     mob.object.position.x += stepX
     mob.object.position.z += stepZ
+    mob.slideDirection.set(0, 0, 0)
     return
   }
 
-  // Remove only the blocked component so contact with a car behaves like frictionless sliding.
+  if (separateMatryoshkaFromVehicleCorner(mob)) {
+    mob.slideDirection.set(0, 0, 0)
+    mob.pathRefreshAt = 0
+    return
+  }
+
+  const stepLength = Math.hypot(stepX, stepZ)
+  if (stepLength > 0.0001) {
+    const desiredX = stepX / stepLength
+    const desiredZ = stepZ / stepLength
+    const contactAxis = getMatryoshkaVehicleContactAxis(currentX, currentZ, currentX + stepX, currentZ + stepZ, matryoshkaObstaclePadding)
+    const slideCandidates = contactAxis === 'x'
+      ? [new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1)]
+      : contactAxis === 'z'
+        ? [new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0)]
+        : [
+            new THREE.Vector3(-desiredZ, 0, desiredX),
+            new THREE.Vector3(desiredZ, 0, -desiredX),
+          ]
+    const targetDirection = matryoshkaMoveDirection.subVectors(mob.target, mob.object.position).setY(0).normalize()
+    const clearSlides = slideCandidates.filter((candidate) => !overlapsMatryoshkaVehicleObstacle(
+      currentX + candidate.x * stepLength,
+      currentZ + candidate.z * stepLength,
+      matryoshkaObstaclePadding,
+    ))
+    if (clearSlides.length > 0) {
+      clearSlides.sort((first, second) => {
+        const firstStickyScore = mob.slideDirectionUntil > now ? first.dot(mob.slideDirection) * 2 : 0
+        const secondStickyScore = mob.slideDirectionUntil > now ? second.dot(mob.slideDirection) * 2 : 0
+        return (second.dot(targetDirection) + secondStickyScore) - (first.dot(targetDirection) + firstStickyScore)
+      })
+      const slide = clearSlides[0]
+      mob.object.position.x += slide.x * stepLength
+      mob.object.position.z += slide.z * stepLength
+      mob.velocity.x = slide.x * (stepLength / delta)
+      mob.velocity.z = slide.z * (stepLength / delta)
+      mob.slideDirection.copy(slide)
+      mob.slideDirectionUntil = now + 0.35
+      return
+    }
+  }
+
   const canSlideX = Math.abs(stepX) > 0.0001 && !overlapsMatryoshkaVehicleObstacle(currentX + stepX, currentZ, matryoshkaObstaclePadding)
   const canSlideZ = Math.abs(stepZ) > 0.0001 && !overlapsMatryoshkaVehicleObstacle(currentX, currentZ + stepZ, matryoshkaObstaclePadding)
   if (canSlideX) mob.object.position.x += stepX
   if (canSlideZ) mob.object.position.z += stepZ
-  if (!canSlideX) mob.velocity.x = 0
-  if (!canSlideZ) mob.velocity.z = 0
+    if (!canSlideX && !canSlideZ) {
+    mob.velocity.set(0, 0, 0)
+  } else if (!canSlideX) mob.velocity.x = 0
+  else if (!canSlideZ) mob.velocity.z = 0
   if (!canSlideX && !canSlideZ) mob.pathRefreshAt = 0
+}
+
+function groundMatryoshkaMob(mob: MatryoshkaMob): void {
+  const mobBounds = new THREE.Box3().setFromObject(mob.object)
+  const ground = getMatryoshkaGroundHit(mob.object.position.x, mob.object.position.z, mobBounds.min.y + 1.25)
+  if (!ground) return
+  mob.object.position.y += ground.point.y - mobBounds.min.y
+}
+
+function moveMatryoshkaWithGroundSteps(mob: MatryoshkaMob, delta: number, now: number): void {
+  const horizontalDistance = Math.hypot(mob.velocity.x * delta, mob.velocity.z * delta)
+  const stepCount = Math.max(1, Math.ceil(horizontalDistance / 0.08))
+  const stepDelta = delta / stepCount
+  for (let stepIndex = 0; stepIndex < stepCount; stepIndex += 1) {
+    groundMatryoshkaMob(mob)
+    moveMatryoshkaWithVehicleSlide(mob, stepDelta, now + stepIndex * stepDelta)
+    groundMatryoshkaMob(mob)
+  }
 }
 
 function getRandomKeySpawnPosition(): THREE.Vector3 | null {
@@ -1663,6 +2024,30 @@ document.querySelector<HTMLElement>('[data-category="targets"]')?.remove()
 document.querySelector<HTMLElement>('[data-category-panel="targets"]')?.remove()
 const physicsWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
 physicsWorld.createCollider(RAPIER.ColliderDesc.cuboid(1000, 0.1, 1000).setTranslation(0, -0.1, 0))
+const matryoshkaPhysicsRadius = 0.3
+
+function createMatryoshkaPhysicsBody(object: THREE.Object3D): { body: RAPIER.RigidBody; offsetY: number } {
+  const offsetY = matryoshkaPhysicsRadius
+  const body = physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(object.position.x, object.position.y + offsetY, object.position.z))
+  body.setGravityScale(0, true)
+  physicsWorld.createCollider(RAPIER.ColliderDesc.ball(matryoshkaPhysicsRadius).setDensity(6).setFriction(1).setRestitution(0.05), body)
+  return { body, offsetY }
+}
+
+function syncMatryoshkaFromPhysics(mob: MatryoshkaMob): void {
+  const translation = mob.physicsBody.translation()
+  const rotation = mob.physicsBody.rotation()
+  mob.object.position.set(translation.x, translation.y - mob.physicsOffsetY, translation.z)
+  mob.object.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w)
+}
+
+function syncMatryoshkaToPhysics(mob: MatryoshkaMob): void {
+  mob.physicsBody.setTranslation({
+    x: mob.object.position.x,
+    y: mob.object.position.y + mob.physicsOffsetY,
+    z: mob.object.position.z,
+  }, true)
+}
 
 const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 600)
 let baseFov = camera.fov
@@ -1802,7 +2187,6 @@ function resolveWeaponForMode(_mode: ShootingMode): WeaponId {
 function saveCurrentWeaponProfile(): void {
   if (restoringSettings) return
   const profile = weaponProfiles[activeWeapon]
-  profile.fireMode = fireModeSetting.value as WeaponProfile['fireMode']
   profile.bulletSpeed = Number(bulletSpeedSetting.value)
   profile.recoil = Number(recoilSetting.value)
   profile.spread = Number(spreadSetting.value)
@@ -1815,8 +2199,6 @@ function saveCurrentWeaponProfile(): void {
 
 function applyWeaponProfile(weaponId: WeaponId): void {
   const profile = weaponProfiles[weaponId]
-  fireMode = profile.fireMode
-  fireModeSetting.value = profile.fireMode
   recoilMode = profile.recoilMode
   recoilModeSetting.value = profile.recoilMode
   bulletSpeedSetting.max = '1000'
@@ -1841,7 +2223,6 @@ function applyWeaponProfile(weaponId: WeaponId): void {
   aimingJumpSpreadMultiplier = profile.aimingJumpSpread / 100
   hipfireJumpSpreadMultiplier = profile.hipfireJumpSpread / 100
   gravityMultiplier = profile.bulletDrop / 100
-  updateBallisticControlState()
 }
 
 function applyWeaponSelection(): void {
@@ -1889,6 +2270,7 @@ function playTrueCarSound(): void {
   if (!trueCarSoundBuffer || !trueCar || !keyPickupCollected) return
   trueCarBounds.setFromObject(trueCar)
   trueCarBounds.getCenter(trueCarWorldPosition)
+  alertMatryoshkasToSound(trueCarWorldPosition, 'car')
 
   const source = gunshotAudioContext.createBufferSource()
   const gain = gunshotAudioContext.createGain()
@@ -2136,11 +2518,6 @@ renderDistanceSetting.addEventListener('input', () => {
 maxFpsSetting.addEventListener('change', () => {
   maxFps = Number(maxFpsSetting.value)
 })
-fireModeSetting.addEventListener('change', () => {
-  fireMode = fireModeSetting.value as 'projectile' | 'hitscan'
-  saveCurrentWeaponProfile()
-  updateBallisticControlState()
-})
 recoilModeSetting.addEventListener('change', () => {
   recoilMode = recoilModeSetting.value as RecoilMode
   saveCurrentWeaponProfile()
@@ -2295,7 +2672,6 @@ hitMarkerDurationSetting.addEventListener('input', () => {
   hitMarkerDuration = Number(hitMarkerDurationSetting.value)
   hitMarkerDurationValue.value = `${hitMarkerDuration.toFixed(2)}s`
 })
-updateBallisticControlState()
 
 settingsCategoryButtons.forEach((button) => {
   button.addEventListener('click', () => {
@@ -3119,6 +3495,7 @@ function updateProjectiles(now: number, delta: number): void {
     const projectileTravel = projectilePosition.clone().sub(projectile.previousPosition)
     const travelDistance = projectileTravel.length()
     let parkingSurfaceHit: THREE.Intersection<THREE.Object3D> | undefined
+    let matryoshkaHit: { mob: MatryoshkaMob; hit: THREE.Intersection<THREE.Object3D> } | undefined
     if (travelDistance > 0) {
       parkingProjectileRaycaster.set(projectile.previousPosition, projectileTravel.normalize())
       parkingProjectileRaycaster.far = travelDistance + projectileRadius
@@ -3126,16 +3503,27 @@ function updateProjectiles(now: number, delta: number): void {
       const parkedCarHit = parkedCars.length > 0 ? parkingProjectileRaycaster.intersectObjects(parkedCars, true)[0] : undefined
       const candidateHits = [parkingLotHit, parkedCarHit].filter((hit): hit is THREE.Intersection<THREE.Object3D> => Boolean(hit))
       parkingSurfaceHit = candidateHits.sort((a, b) => a.distance - b.distance)[0]
+      for (const mob of matryoshkaMobs) {
+        if (mob.knockedDownAt > 0) continue
+        const mobHit = parkingProjectileRaycaster.intersectObject(mob.object, true)[0]
+        if (mobHit && (!matryoshkaHit || mobHit.distance < matryoshkaHit.hit.distance)) matryoshkaHit = { mob, hit: mobHit }
+      }
     }
     projectile.previousPosition.copy(projectilePosition)
     const hitFloor = translation.y <= projectileRadius + 0.01
-    if (parkingSurfaceHit) {
+    if (matryoshkaHit && (!parkingSurfaceHit || matryoshkaHit.hit.distance <= parkingSurfaceHit.distance)) {
+      const impactNormal = matryoshkaHit.hit.face
+        ? matryoshkaHit.hit.face.normal.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(matryoshkaHit.hit.object.matrixWorld)).normalize()
+        : new THREE.Vector3(0, 1, 0)
+      createImpactSpark(matryoshkaHit.hit.point, impactNormal, projectileTravel.normalize())
+      knockDownMatryoshkaMob(matryoshkaHit.mob, now, projectileTravel)
+    } else if (parkingSurfaceHit) {
       const impactNormal = parkingSurfaceHit.face
         ? parkingSurfaceHit.face.normal.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(parkingSurfaceHit.object.matrixWorld)).normalize()
         : new THREE.Vector3(0, 1, 0)
       createImpactSpark(parkingSurfaceHit.point, impactNormal, projectileTravel.normalize())
     } else if (hitFloor) createImpactSpark(projectilePosition, new THREE.Vector3(0, 1, 0), projectileTravel.normalize())
-    if (parkingSurfaceHit || hitFloor || now - projectile.bornAt > projectileLifetime) {
+    if (matryoshkaHit || parkingSurfaceHit || hitFloor || now - projectile.bornAt > projectileLifetime) {
       physicsWorld.removeRigidBody(projectile.body)
       scene.remove(projectile.mesh)
       projectiles.splice(index, 1)
@@ -3144,7 +3532,6 @@ function updateProjectiles(now: number, delta: number): void {
 }
 
 const shotDirection = new THREE.Vector3()
-const shotRaycaster = new THREE.Raycaster()
 const shotOrigin = new THREE.Vector3()
 const cameraOrigin = new THREE.Vector3()
 const aimPoint = new THREE.Vector3()
@@ -3152,26 +3539,6 @@ const cameraRight = new THREE.Vector3()
 const cameraUp = new THREE.Vector3()
 const impactOffset = new THREE.Vector3()
 const projectileAimDistance = 45
-const hitscanTargetCenter = new THREE.Vector3()
-const hitscanClosestPoint = new THREE.Vector3()
-function findHitscanTarget(): typeof target | null {
-  let closestTarget: typeof target | null = null
-  let closestDistance = Infinity
-  const ray = shotRaycaster.ray
-  for (const candidate of gridTargets) {
-    if (!candidate.visible) continue
-    candidate.getWorldPosition(hitscanTargetCenter)
-    const distanceAlongRay = hitscanTargetCenter.clone().sub(ray.origin).dot(ray.direction)
-    if (distanceAlongRay < 0 || distanceAlongRay >= closestDistance) continue
-    ray.at(distanceAlongRay, hitscanClosestPoint)
-    const hitRadius = targetRadius * currentTargetScaleMultiplier
-    if (hitscanClosestPoint.distanceToSquared(hitscanTargetCenter) <= hitRadius ** 2) {
-      closestTarget = candidate
-      closestDistance = distanceAlongRay
-    }
-  }
-  return closestTarget
-}
 
 function registerTargetHit(hitTarget: typeof target): void {
   if (hitVfxEnabled) {
@@ -3208,14 +3575,6 @@ function registerTargetHit(hitTarget: typeof target): void {
 }
 
 function createTracer(_position: THREE.Vector3): void {
-  return
-}
-
-function createHitscanTracer(_start: THREE.Vector3, _end: THREE.Vector3): void {
-  return
-}
-
-function createLaserTracer(_start: THREE.Vector3, _end: THREE.Vector3): void {
   return
 }
 
@@ -3283,28 +3642,6 @@ function fireShot(): void {
   aimPoint.addScaledVector(cameraRight, horizontalSpread)
   aimPoint.addScaledVector(cameraUp, verticalSpread)
   shotDirection.copy(aimPoint).sub(shotOrigin).normalize()
-  if (fireMode === 'hitscan') {
-    gridTargets.forEach((candidate) => candidate.updateMatrixWorld(true))
-    shotRaycaster.set(cameraOrigin, shotDirection)
-    shotRaycaster.near = 0
-    shotRaycaster.far = Math.max(camera.far, 10000)
-    const meshHit = shotRaycaster.intersectObjects(gridTargets.filter((candidate) => candidate.visible), false)[0]
-    const hitTarget = findHitscanTarget()
-    const hit = meshHit && hitTarget
-      ? meshHit.distance <= shotRaycaster.ray.origin.distanceTo(hitTarget.position) ? meshHit : { object: hitTarget, distance: 0 }
-      : meshHit ?? (hitTarget ? { object: hitTarget, distance: 0 } : undefined)
-    const floorDistance = shotDirection.y < -0.0001 ? (cameraOrigin.y - 0.01) / -shotDirection.y : Infinity
-    const floorIsFirstHit = Number.isFinite(floorDistance) && floorDistance > 0 && (!hit || floorDistance < hit.distance)
-    const tracerEnd = floorIsFirstHit
-      ? cameraOrigin.clone().addScaledVector(shotDirection, floorDistance)
-      : aimPoint.clone()
-    const tracerOffset = cameraUp.clone().multiplyScalar(0.08)
-    const tracerStart = shotOrigin.clone().add(tracerOffset)
-    const tracerFinish = tracerEnd.clone().add(tracerOffset)
-    createLaserTracer(tracerStart, tracerFinish)
-    if (hit) registerTargetHit(hit.object as typeof target)
-    return
-  }
   spawnProjectile(shotDirection)
 }
 
