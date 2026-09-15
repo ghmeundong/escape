@@ -485,6 +485,8 @@ let trueCarEntered = false
 let trueCarSoundPlaying = false
 type MatryoshkaMobState = 'wander' | 'investigate' | 'chase'
 type MatryoshkaSoundSource = 'player' | 'car'
+type MatryoshkaWaypointNetwork = 'yellow' | 'blue'
+type MatryoshkaInvestigationPhase = 'yellow' | 'blue'
 type MatryoshkaMob = {
   object: THREE.Object3D
   state: MatryoshkaMobState
@@ -501,6 +503,9 @@ type MatryoshkaMob = {
   knockedDownAt: number
   knockdownBaseY: number
   routeSide: number
+  chaseNetwork: MatryoshkaWaypointNetwork
+  investigationPhase: MatryoshkaInvestigationPhase
+  lastSeenPlayerPosition: THREE.Vector3
   pathRefreshAt: number
   route: THREE.Vector3[]
   visionIndicator: THREE.LineLoop
@@ -527,6 +532,7 @@ const matryoshkaPatrolWaypoints = [
 const matryoshkaDetectionRange = 34
 const matryoshkaSpeed = 7.65
 const matryoshkaChaseSpeed = 7.65
+const matryoshkaChaseMemoryDistance = 18
 const matryoshkaPathRefreshInterval = 0.6
 const matryoshkaEyeHeight = 2.5
 const matryoshkaModelYawOffset = -Math.PI / 2
@@ -534,6 +540,54 @@ const matryoshkaMinWanderDistance = 35
 const matryoshkaObstaclePadding = 0.3
 const playerWalkSpeed = 3.8
 const playerRunSpeed = 11.5
+let runningFootstepInterval = 0.5
+let runningFootstepClipDuration = runningFootstepInterval * 2
+let runningFootstepLoopStart = 0
+
+function detectTwoFootstepClipDuration(buffer: AudioBuffer): number {
+  const samples = buffer.getChannelData(0)
+  const windowSize = Math.max(1, Math.floor(buffer.sampleRate * 0.01))
+  const envelope: number[] = []
+  for (let offset = 0; offset < samples.length; offset += windowSize) {
+    let energy = 0
+    const end = Math.min(samples.length, offset + windowSize)
+    for (let index = offset; index < end; index += 1) energy += samples[index] ** 2
+    envelope.push(Math.sqrt(energy / Math.max(1, end - offset)))
+  }
+  const sortedEnvelope = [...envelope].sort((first, second) => first - second)
+  const noiseFloor = sortedEnvelope[Math.floor(sortedEnvelope.length * 0.65)] ?? 0
+  const peakThreshold = Math.max(noiseFloor * 2.2, (sortedEnvelope.at(-1) ?? 0) * 0.2)
+  const minPeakSpacing = Math.max(1, Math.floor(0.16 / 0.01))
+  const peaks: number[] = []
+  for (let index = 1; index < envelope.length - 1; index += 1) {
+    if (envelope[index] < peakThreshold || envelope[index] < envelope[index - 1] || envelope[index] < envelope[index + 1]) continue
+    if (peaks.length > 0 && index - peaks[peaks.length - 1] < minPeakSpacing) {
+      if (envelope[index] > envelope[peaks[peaks.length - 1]]) peaks[peaks.length - 1] = index
+      continue
+    }
+    peaks.push(index)
+  }
+  const tenthFootstep = peaks[9]
+  const eleventhFootstep = peaks[10]
+  const detectedDuration = eleventhFootstep !== undefined
+    ? Math.max(0.2, eleventhFootstep * 0.01 - 0.035)
+    : tenthFootstep !== undefined
+      ? Math.min(buffer.duration, tenthFootstep * 0.01 + 0.12)
+      : buffer.duration
+  const firstFootstep = peaks[0]
+  const secondFootstep = peaks[1]
+  if (firstFootstep !== undefined && secondFootstep !== undefined) {
+    runningFootstepInterval = Math.max(0.2, (secondFootstep - firstFootstep) * 0.01)
+    runningFootstepLoopStart = Math.max(0, firstFootstep * 0.01 - 0.08)
+    runningFootstepClipDuration = eleventhFootstep === undefined
+      ? Math.min(buffer.duration, detectedDuration)
+      : Math.min(buffer.duration, Math.max(runningFootstepLoopStart + runningFootstepInterval, eleventhFootstep * 0.01 - 0.035))
+  } else {
+    runningFootstepLoopStart = 0
+    runningFootstepClipDuration = Math.min(buffer.duration, detectedDuration)
+  }
+  return runningFootstepClipDuration
+}
 let matryoshkaVehicleHeight = 20
 const matryoshkaMobPosition = new THREE.Vector3()
 const matryoshkaPlayerPosition = new THREE.Vector3()
@@ -595,17 +649,33 @@ function isMatryoshkaWaypointValid(x: number, z: number): boolean {
 function rebuildMatryoshkaWaypoints(): void {
   if (!parkingBounds) return
   matryoshkaWaypoints.length = 0
-  matryoshkaWaypoints.push(...matryoshkaPatrolWaypoints.map((waypoint) => waypoint.clone()))
-  matryoshkaRecoveryWaypoints.length = 0
-  const recoverySpacing = 3.5
-  for (let x = parkingBounds.min.x + 2; x <= parkingBounds.max.x - 2; x += recoverySpacing) {
-    for (let z = parkingBounds.min.z + 2; z <= parkingBounds.max.z - 2; z += recoverySpacing) {
-      if (!isMatryoshkaWaypointValid(x, z)) continue
-      const hit = getMatryoshkaGroundHit(x, z)
-      if (hit) matryoshkaRecoveryWaypoints.push(new THREE.Vector3(x, hit.point.y, z))
+  const validatedPatrolWaypoints = matryoshkaPatrolWaypoints
+    .map((waypoint) => {
+      const ground = getMatryoshkaGroundHit(waypoint.x, waypoint.z, waypoint.y + 2.5)
+      return ground ? new THREE.Vector3(waypoint.x, ground.point.y + 0.02, waypoint.z) : null
+    })
+    .filter((waypoint): waypoint is THREE.Vector3 => waypoint !== null)
+  matryoshkaWaypoints.push(...validatedPatrolWaypoints)
+  const rampStart = validatedPatrolWaypoints[1]
+  const rampEnd = validatedPatrolWaypoints[validatedPatrolWaypoints.length - 1]
+  if (rampStart && rampEnd && rampStart.distanceTo(rampEnd) > 4) {
+    const rampSteps = Math.ceil(rampStart.distanceTo(rampEnd) / 3)
+    for (let step = 1; step < rampSteps; step += 1) {
+      const progress = step / rampSteps
+      const x = THREE.MathUtils.lerp(rampStart.x, rampEnd.x, progress)
+      const z = THREE.MathUtils.lerp(rampStart.z, rampEnd.z, progress)
+      const expectedY = THREE.MathUtils.lerp(rampStart.y, rampEnd.y, progress)
+      const ground = getMatryoshkaGroundHit(x, z, expectedY + 2.5)
+      if (!ground || overlapsMatryoshkaVehicleObstacle(x, z, matryoshkaObstaclePadding)) continue
+      matryoshkaWaypoints.push(new THREE.Vector3(x, ground.point.y + 0.02, z))
     }
   }
+  matryoshkaRecoveryWaypoints.length = 0
   syncMatryoshkaWaypointMarkers()
+}
+
+function getMatryoshkaWaypointNetwork(network: MatryoshkaWaypointNetwork): THREE.Vector3[] {
+  return network === 'yellow' ? matryoshkaWaypoints : matryoshkaRecoveryWaypoints
 }
 
 function syncMatryoshkaWaypointMarkers(): void {
@@ -614,7 +684,6 @@ function syncMatryoshkaWaypointMarkers(): void {
   matryoshkaRecoveryWaypointMarkers.forEach((marker) => scene.remove(marker))
   matryoshkaRecoveryWaypointMarkers.length = 0
   const markerMaterial = new THREE.MeshBasicMaterial({ color: '#ffcf52', transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false })
-  const recoveryMarkerMaterial = new THREE.MeshBasicMaterial({ color: '#45c7ff', transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false })
   matryoshkaWaypoints.forEach((waypoint) => {
     const marker = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), markerMaterial)
     marker.position.copy(waypoint)
@@ -623,15 +692,6 @@ function syncMatryoshkaWaypointMarkers(): void {
     marker.visible = waypointDisplaySetting.checked
     scene.add(marker)
     matryoshkaWaypointMarkers.push(marker)
-  })
-  matryoshkaRecoveryWaypoints.forEach((waypoint) => {
-    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 4), recoveryMarkerMaterial)
-    marker.position.copy(waypoint)
-    marker.position.y += 0.18
-    marker.renderOrder = 1003
-    marker.visible = waypointDisplaySetting.checked
-    scene.add(marker)
-    matryoshkaRecoveryWaypointMarkers.push(marker)
   })
 }
 
@@ -697,17 +757,18 @@ function addMatryoshkaWaypointFromAim(): void {
   matryoshkaMobs.forEach((mob) => { mob.pathRefreshAt = 0 })
 }
 
-function alertMatryoshkasToSound(position: THREE.Vector3, source: MatryoshkaSoundSource = 'player'): void {
+function alertMatryoshkasToSound(position: THREE.Vector3, source: MatryoshkaSoundSource = 'player', interruptChase = false): void {
   const soundTarget = source === 'player' ? matryoshkaSoundTarget : matryoshkaCarSoundTarget
   if (source === 'player') matryoshkaSoundVersion += 1
   else matryoshkaCarSoundVersion += 1
   soundTarget.copy(position)
   matryoshkaMobs.forEach((mob) => {
-    if (source === 'car' && mob.state === 'chase') return
+    if (mob.state === 'chase' && !interruptChase) return
     if (source === 'car' && mob.state === 'investigate' && mob.soundSource === 'player') return
     if (source === 'player' && mob.state === 'investigate' && mob.soundSource === 'player') return
     mob.state = 'investigate'
     mob.soundSource = source
+    mob.investigationPhase = 'yellow'
     mob.heardSoundVersion = 0
     mob.route = []
     mob.pathRefreshAt = 0
@@ -753,7 +814,7 @@ function findMatryoshkaRoute(start: THREE.Vector3, end: THREE.Vector3, waypoints
   const startWaypoint = findNearestMatryoshkaWaypoint(start, waypoints)
   const endWaypoint = findNearestMatryoshkaWaypoint(end, waypoints)
   if (!startWaypoint || !endWaypoint) return []
-  if (isMatryoshkaPathClear(start, end)) return [end.clone()]
+  if (Math.abs(end.y - start.y) <= 2.5 && isMatryoshkaPathClear(start, end)) return [end.clone()]
 
   const distances = new Map<THREE.Vector3, number>(waypoints.map((waypoint) => [waypoint, Infinity]))
   const previous = new Map<THREE.Vector3, THREE.Vector3>()
@@ -764,7 +825,7 @@ function findMatryoshkaRoute(start: THREE.Vector3, end: THREE.Vector3, waypoints
     const current = open.shift()!
     if (current === endWaypoint) break
     for (const neighbor of waypoints) {
-      if (neighbor === current || current.distanceToSquared(neighbor) > 36 || !isMatryoshkaPathClear(current, neighbor)) continue
+      if (neighbor === current || current.distanceToSquared(neighbor) > 36 || Math.abs(neighbor.y - current.y) > 2.5 || !isMatryoshkaPathClear(current, neighbor)) continue
       const nextDistance = (distances.get(current) ?? Infinity) + current.distanceTo(neighbor)
       if (nextDistance >= (distances.get(neighbor) ?? Infinity)) continue
       distances.set(neighbor, nextDistance)
@@ -787,42 +848,43 @@ function getMatryoshkaRouteDistance(start: THREE.Vector3, route: THREE.Vector3[]
 }
 
 function getMatryoshkaRouteOverlapScore(mob: MatryoshkaMob, route: THREE.Vector3[]): number {
-  let overlappingMobCount = 0
+  let overlapScore = 0
   for (const otherMob of matryoshkaMobs) {
     if (otherMob === mob || otherMob.knockedDownAt > 0 || otherMob.route.length === 0) continue
-    const overlapsRoute = route.some((point) => otherMob.route.some((otherPoint) => point.distanceToSquared(otherPoint) < 25))
-    if (overlapsRoute) overlappingMobCount += 1
+    for (const point of route) {
+      for (const otherPoint of otherMob.route) {
+        if (point.distanceToSquared(otherPoint) < 25) overlapScore += 1
+      }
+    }
   }
-  if (overlappingMobCount <= 1) return overlappingMobCount * 8
-  return 100 + (overlappingMobCount - 2) * 100
+  return overlapScore
 }
 
-function findMatryoshkaNonOverlappingRoute(mob: MatryoshkaMob, start: THREE.Vector3, end: THREE.Vector3, waypoints = matryoshkaWaypoints): THREE.Vector3[] {
+function findMatryoshkaNonOverlappingRoute(mob: MatryoshkaMob, start: THREE.Vector3, end: THREE.Vector3, network: MatryoshkaWaypointNetwork = 'yellow'): THREE.Vector3[] {
   const candidateRoutes: THREE.Vector3[][] = []
-  const baseRoute = findMatryoshkaRoute(start, end, waypoints)
-  if (baseRoute.length > 0) candidateRoutes.push(baseRoute)
+  const waypoints = getMatryoshkaWaypointNetwork(network)
   for (const waypoint of waypoints) {
     if (waypoint.distanceToSquared(start) < 64 || waypoint.distanceToSquared(end) < 64) continue
-    const routeToWaypoint = findMatryoshkaRoute(start, waypoint)
-    const routeFromWaypoint = findMatryoshkaRoute(waypoint, end)
+    const routeToWaypoint = findMatryoshkaRoute(start, waypoint, waypoints)
+    const routeFromWaypoint = findMatryoshkaRoute(waypoint, end, waypoints)
     if (routeToWaypoint.length === 0 || routeFromWaypoint.length === 0) continue
     candidateRoutes.push([...routeToWaypoint, ...routeFromWaypoint.slice(1)])
   }
   candidateRoutes.sort((first, second) => {
     const overlapDifference = getMatryoshkaRouteOverlapScore(mob, first) - getMatryoshkaRouteOverlapScore(mob, second)
-    const distanceDifference = getMatryoshkaRouteDistance(start, first) - getMatryoshkaRouteDistance(start, second)
-    return overlapDifference * 0.35 + distanceDifference * 0.04
+    return overlapDifference || getMatryoshkaRouteDistance(start, first) - getMatryoshkaRouteDistance(start, second)
   })
-  return candidateRoutes[0] ?? baseRoute
+  return candidateRoutes[0] ?? findMatryoshkaRoute(start, end, waypoints)
 }
 
 function findMatryoshkaRecoveryRoute(start: THREE.Vector3): THREE.Vector3[] {
-  const recoveryCandidates = matryoshkaRecoveryWaypoints
+  const recoveryCandidates = matryoshkaWaypoints
     .filter((waypoint) => waypoint.distanceToSquared(start) > 36)
     .sort((first, second) => first.distanceToSquared(start) - second.distanceToSquared(start))
   const destination = findNearestMatryoshkaWaypoint(start, recoveryCandidates)
   if (!destination) return []
-  return findMatryoshkaRoute(start, destination, matryoshkaRecoveryWaypoints)
+  const recoveryGraph = [...matryoshkaRecoveryWaypoints, ...matryoshkaWaypoints]
+  return findMatryoshkaRoute(start, destination, recoveryGraph)
 }
 
 function findMatryoshkaOpenDirection(mob: MatryoshkaMob, origin: THREE.Vector3): THREE.Vector3 | null {
@@ -926,36 +988,53 @@ function isMatryoshkaPatrolDestinationAvailable(mob: MatryoshkaMob, destination:
   return !matryoshkaMobs.some((otherMob) => otherMob !== mob && otherMob.state === 'wander' && otherMob.patrolDestination && otherMob.patrolDestination.distanceToSquared(destination) < 144)
 }
 
+function isMatryoshkaWallPathBlocked(start: THREE.Vector3, end: THREE.Vector3): boolean {
+  if (!parkingLotRoot) return false
+  const direction = new THREE.Vector3(end.x - start.x, 0, end.z - start.z)
+  const distance = direction.length()
+  if (distance < 0.01) return false
+  direction.normalize()
+  for (const height of [0.8, 1.8, 2.8]) {
+    parkingWallRaycaster.set(new THREE.Vector3(start.x, start.y + height, start.z), direction)
+    parkingWallRaycaster.far = distance - 0.25
+    if (parkingWallRaycaster.intersectObject(parkingLotRoot, true).length > 0) return true
+  }
+  return false
+}
+
+function getMatryoshkaHorizontalDistanceSquared(first: THREE.Vector3, second: THREE.Vector3): number {
+  const deltaX = first.x - second.x
+  const deltaZ = first.z - second.z
+  return deltaX * deltaX + deltaZ * deltaZ
+}
+
 function chooseMatryoshkaTarget(mob: MatryoshkaMob): void {
   mob.object.getWorldPosition(matryoshkaMobPosition)
   if (mob.state !== 'wander') mob.patrolDestination = null
-  const playerDistance = Math.hypot(camera.position.x - matryoshkaMobPosition.x, camera.position.z - matryoshkaMobPosition.z)
-  const chaseTarget = playerDistance < 4 ? camera.position.clone() : getMatryoshkaSeparatedTarget(mob, camera.position)
+  const chaseTarget = mob.lastSeenPlayerPosition.clone()
   if (mob.state === 'chase') {
-    const chaseWaypoints = matryoshkaRecoveryWaypoints.length > 0 ? matryoshkaRecoveryWaypoints : matryoshkaWaypoints
-    mob.route = findMatryoshkaRoute(matryoshkaMobPosition, chaseTarget, chaseWaypoints)
-    const nextWaypoint = mob.route[0]
-    if (nextWaypoint) mob.target.copy(nextWaypoint)
+    mob.route = [chaseTarget]
+    mob.target.copy(chaseTarget)
     return
   }
   if (mob.state === 'investigate') {
     const soundTarget = (mob.soundSource === 'player' ? matryoshkaSoundTarget : matryoshkaCarSoundTarget).clone()
-    mob.route = findMatryoshkaNonOverlappingRoute(mob, matryoshkaMobPosition, soundTarget)
-    if (mob.route.length === 0) mob.route = [soundTarget.clone()]
+    mob.route = [soundTarget]
     mob.target.copy(mob.route[0])
     mob.heardSoundVersion = mob.soundSource === 'player' ? matryoshkaSoundVersion : matryoshkaCarSoundVersion
     return
   }
   if (matryoshkaWaypoints.length === 0) return
   const candidates: THREE.Vector3[] = []
-  for (let attempt = 0; attempt < 18; attempt += 1) {
-    const candidate = getMatryoshkaFreeRoamTarget(matryoshkaMobPosition)
-    if (candidate && isMatryoshkaPatrolDestinationAvailable(mob, candidate)) candidates.push(candidate)
+  for (const waypoint of matryoshkaWaypoints) {
+    if (getMatryoshkaHorizontalDistanceSquared(waypoint, matryoshkaMobPosition) > 36 && isMatryoshkaPatrolDestinationAvailable(mob, waypoint) && !isMatryoshkaWallPathBlocked(matryoshkaMobPosition, waypoint)) {
+      candidates.push(waypoint.clone())
+    }
   }
   let bestRoute: THREE.Vector3[] = []
   let bestDistance = 0
   for (const candidate of candidates) {
-    const route = findMatryoshkaNonOverlappingRoute(mob, matryoshkaMobPosition, candidate)
+    const route = [candidate]
     const routeDistance = route.reduce((distance, point, index) => distance + (index === 0 ? matryoshkaMobPosition.distanceTo(point) : route[index - 1].distanceTo(point)), 0)
     if (routeDistance > bestDistance) {
       bestDistance = routeDistance
@@ -963,7 +1042,7 @@ function chooseMatryoshkaTarget(mob: MatryoshkaMob): void {
     }
   }
   if (bestRoute.length === 0) {
-    const availableWaypoints = matryoshkaWaypoints.filter((waypoint) => waypoint.distanceToSquared(matryoshkaMobPosition) > 36 && isMatryoshkaPatrolDestinationAvailable(mob, waypoint))
+    const availableWaypoints = matryoshkaWaypoints.filter((waypoint) => getMatryoshkaHorizontalDistanceSquared(waypoint, matryoshkaMobPosition) > 36 && isMatryoshkaPatrolDestinationAvailable(mob, waypoint) && !isMatryoshkaWallPathBlocked(matryoshkaMobPosition, waypoint))
     const fallback = (availableWaypoints.length > 0 ? availableWaypoints : matryoshkaWaypoints).reduce((farthest, waypoint) => waypoint.distanceToSquared(matryoshkaMobPosition) > farthest.distanceToSquared(matryoshkaMobPosition) ? waypoint : farthest)
     bestRoute = [fallback.clone()]
   }
@@ -976,7 +1055,7 @@ function ensureMatryoshkaWanderMovement(mob: MatryoshkaMob): void {
   if (mob.state !== 'wander' || mob.route.length > 0) return
   mob.object.getWorldPosition(matryoshkaMobPosition)
   const nextWaypoint = matryoshkaWaypoints
-    .filter((waypoint) => waypoint.distanceToSquared(matryoshkaMobPosition) > 36 && isMatryoshkaPatrolDestinationAvailable(mob, waypoint))
+    .filter((waypoint) => getMatryoshkaHorizontalDistanceSquared(waypoint, matryoshkaMobPosition) > 36 && isMatryoshkaPatrolDestinationAvailable(mob, waypoint) && !isMatryoshkaWallPathBlocked(matryoshkaMobPosition, waypoint))
     .sort((first, second) => first.distanceToSquared(matryoshkaMobPosition) - second.distanceToSquared(matryoshkaMobPosition))[0]
   if (!nextWaypoint) return
   mob.route = [nextWaypoint.clone()]
@@ -1055,6 +1134,9 @@ function createMatryoshkaClone(sourceMob: MatryoshkaMob): void {
     knockedDownAt: 0,
     knockdownBaseY: cloneObject.position.y,
     routeSide: -sourceMob.routeSide,
+    chaseNetwork: sourceMob.chaseNetwork === 'blue' ? 'yellow' : 'blue',
+    investigationPhase: 'yellow',
+    lastSeenPlayerPosition: sourceMob.lastSeenPlayerPosition.clone(),
     pathRefreshAt: 0,
     route: [],
     visionIndicator,
@@ -1115,12 +1197,20 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
       return
     }
     const distanceToPlayer = matryoshkaMobPosition.distanceTo(camera.position)
-    const playerVisible = distanceToPlayer <= matryoshkaDetectionRange && matryoshkaHasLineOfSight(mob.object, camera.position)
+    const playerInRedRange = distanceToPlayer <= matryoshkaDetectionRange
+    const playerVisible = playerInRedRange || matryoshkaHasLineOfSight(mob.object, camera.position)
+    if (playerVisible) mob.lastSeenPlayerPosition.copy(camera.position)
+    const chaseMemoryActive = mob.state === 'chase' && !playerVisible && distanceToPlayer <= matryoshkaChaseMemoryDistance
     const currentSoundVersion = mob.soundSource === 'player' ? matryoshkaSoundVersion : matryoshkaCarSoundVersion
     const investigationTarget = mob.soundSource === 'player' ? matryoshkaSoundTarget : matryoshkaCarSoundTarget
+    if (mob.state === 'investigate' && mob.investigationPhase === 'yellow' && investigationTarget.distanceToSquared(matryoshkaMobPosition) < 324) {
+      mob.investigationPhase = 'blue'
+      mob.route = []
+      mob.pathRefreshAt = 0
+    }
     const reachedSound = mob.state === 'investigate' && mob.heardSoundVersion === currentSoundVersion && investigationTarget.distanceToSquared(matryoshkaMobPosition) < 16
     // Visual contact always outranks an older gunshot or footstep target.
-    const nextState: MatryoshkaMobState = playerVisible
+    const nextState: MatryoshkaMobState = playerVisible || chaseMemoryActive
       ? 'chase'
       : reachedSound
         ? 'wander'
@@ -1130,28 +1220,19 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
     const previousState = mob.state
     if (nextState !== mob.state) {
       mob.state = nextState
+      if (nextState === 'chase') mob.chaseNetwork = mob.isClone ? 'yellow' : 'blue'
       mob.route = []
-      if (nextState === 'wander' && previousState !== 'wander') {
-        mob.route = findMatryoshkaRecoveryRoute(matryoshkaMobPosition)
-        if (mob.route.length > 0) mob.target.copy(mob.route[0])
-        else chooseMatryoshkaTarget(mob)
-      }
+      if (nextState === 'wander' && previousState !== 'wander') chooseMatryoshkaTarget(mob)
       if (mob.route.length > 0) mob.target.copy(mob.route[0])
       mob.pathRefreshAt = 0
     }
     if (nextState === 'chase' || (nextState === 'investigate' && mob.soundSource === 'player')) fearActive = true
-    const atInvestigationWaypoint = mob.state === 'investigate'
-      && mob.route.length === 1
-      && mob.target.distanceToSquared(matryoshkaMobPosition) < 4
-      && investigationTarget.distanceToSquared(matryoshkaMobPosition) >= 16
-    if (atInvestigationWaypoint) {
-      chooseMatryoshkaTarget(mob)
-      mob.pathRefreshAt = now + matryoshkaPathRefreshInterval
-    } else if (mob.target.distanceToSquared(matryoshkaMobPosition) < 4 && mob.route.length > 1) {
+    const targetHorizontalDistanceSquared = getMatryoshkaHorizontalDistanceSquared(mob.target, matryoshkaMobPosition)
+    if (targetHorizontalDistanceSquared < 4 && mob.route.length > 1) {
       mob.route.shift()
       mob.target.copy(mob.route[0])
       mob.pathRefreshAt = now + matryoshkaPathRefreshInterval
-    } else if (mob.route.length === 0 || mob.target.distanceToSquared(matryoshkaMobPosition) < 2 || (mob.state !== 'investigate' && now >= mob.pathRefreshAt)) {
+    } else if (mob.route.length === 0 || targetHorizontalDistanceSquared < 4) {
       chooseMatryoshkaTarget(mob)
       mob.pathRefreshAt = now + matryoshkaPathRefreshInterval
     }
@@ -1164,7 +1245,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
       continue
     }
     matryoshkaMoveDirection.normalize()
-    const speed = (mob.state === 'chase' ? matryoshkaChaseSpeed : matryoshkaSpeed) * (mob.isClone ? 1.5 : 1)
+    const speed = (mob.state === 'chase' || mob.state === 'investigate' ? matryoshkaChaseSpeed * 1.2 : matryoshkaSpeed) * (mob.isClone ? 1.5 : 1)
     mob.velocity.lerp(matryoshkaMoveDirection.multiplyScalar(speed), 1 - Math.exp(-8 * delta))
     moveMatryoshkaWithGroundSteps(mob, delta, now)
     syncMatryoshkaToPhysics(mob)
@@ -1179,9 +1260,8 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
         mob.route = [escapeTarget]
         mob.target.copy(escapeTarget)
       } else {
-        const recoveryRoute = findMatryoshkaRecoveryRoute(movementStart)
-        mob.route = recoveryRoute
-        if (recoveryRoute.length > 0) mob.target.copy(recoveryRoute[0])
+        mob.route = []
+        chooseMatryoshkaTarget(mob)
       }
       mob.velocity.set(0, 0, 0)
       mob.stationaryTime = 0
@@ -1256,6 +1336,9 @@ function spawnMatryoshkaMob(): void {
       knockedDownAt: 0,
       knockdownBaseY: mobObject.position.y,
       routeSide: matryoshkaMobs.length % 2 === 0 ? -1 : 1,
+      chaseNetwork: matryoshkaMobs.length % 2 === 0 ? 'blue' : 'yellow',
+      investigationPhase: 'yellow',
+      lastSeenPlayerPosition: spawn.clone(),
       pathRefreshAt: 0,
       route: [],
       visionIndicator,
@@ -1385,13 +1468,25 @@ function separateMatryoshkaFromVehicleCorner(mob: MatryoshkaMob): boolean {
 function moveMatryoshkaWithVehicleSlide(mob: MatryoshkaMob, delta: number, now: number): void {
   const stepX = mob.velocity.x * delta
   const stepZ = mob.velocity.z * delta
+  const horizontalSpeed = Math.hypot(mob.velocity.x, mob.velocity.z)
   const currentX = mob.object.position.x
   const currentZ = mob.object.position.z
   const canMoveFull = !overlapsMatryoshkaVehicleObstacle(currentX + stepX, currentZ + stepZ, matryoshkaObstaclePadding)
+  if (canMoveFull && mob.slideDirectionUntil > now && mob.slideDirection.lengthSq() > 0.01) {
+    const slideStepX = mob.slideDirection.x * Math.hypot(stepX, stepZ)
+    const slideStepZ = mob.slideDirection.z * Math.hypot(stepX, stepZ)
+    if (!overlapsMatryoshkaVehicleObstacle(currentX + slideStepX, currentZ + slideStepZ, matryoshkaObstaclePadding)) {
+      mob.object.position.x += slideStepX
+      mob.object.position.z += slideStepZ
+      mob.velocity.x = mob.slideDirection.x * horizontalSpeed
+      mob.velocity.z = mob.slideDirection.z * horizontalSpeed
+      return
+    }
+  }
   if (canMoveFull) {
     mob.object.position.x += stepX
     mob.object.position.z += stepZ
-    mob.slideDirection.set(0, 0, 0)
+    if (mob.slideDirectionUntil <= now) mob.slideDirection.set(0, 0, 0)
     return
   }
 
@@ -1422,15 +1517,17 @@ function moveMatryoshkaWithVehicleSlide(mob: MatryoshkaMob, delta: number, now: 
     ))
     if (clearSlides.length > 0) {
       clearSlides.sort((first, second) => {
-        const firstStickyScore = mob.slideDirectionUntil > now ? first.dot(mob.slideDirection) * 2 : 0
-        const secondStickyScore = mob.slideDirectionUntil > now ? second.dot(mob.slideDirection) * 2 : 0
-        return (second.dot(targetDirection) + secondStickyScore) - (first.dot(targetDirection) + firstStickyScore)
+        const firstStickyScore = mob.slideDirectionUntil > now ? first.dot(mob.slideDirection) * 8 : 0
+        const secondStickyScore = mob.slideDirectionUntil > now ? second.dot(mob.slideDirection) * 8 : 0
+        const firstTargetScore = first.dot(targetDirection) * (mob.isClone ? -1 : 1)
+        const secondTargetScore = second.dot(targetDirection) * (mob.isClone ? -1 : 1)
+        return (secondTargetScore + secondStickyScore) - (firstTargetScore + firstStickyScore)
       })
       const slide = clearSlides[0]
       mob.object.position.x += slide.x * stepLength
       mob.object.position.z += slide.z * stepLength
-      mob.velocity.x = slide.x * (stepLength / delta)
-      mob.velocity.z = slide.z * (stepLength / delta)
+      mob.velocity.x = slide.x * horizontalSpeed
+      mob.velocity.z = slide.z * horizontalSpeed
       mob.slideDirection.copy(slide)
       mob.slideDirectionUntil = now + 0.35
       return
@@ -1441,10 +1538,14 @@ function moveMatryoshkaWithVehicleSlide(mob: MatryoshkaMob, delta: number, now: 
   const canSlideZ = Math.abs(stepZ) > 0.0001 && !overlapsMatryoshkaVehicleObstacle(currentX, currentZ + stepZ, matryoshkaObstaclePadding)
   if (canSlideX) mob.object.position.x += stepX
   if (canSlideZ) mob.object.position.z += stepZ
-    if (!canSlideX && !canSlideZ) {
+  if (!canSlideX && !canSlideZ) {
     mob.velocity.set(0, 0, 0)
-  } else if (!canSlideX) mob.velocity.x = 0
-  else if (!canSlideZ) mob.velocity.z = 0
+  } else {
+    const slideX = canSlideX ? Math.sign(stepX) : 0
+    const slideZ = canSlideZ ? Math.sign(stepZ) : 0
+    const slideLength = Math.hypot(slideX, slideZ) || 1
+    mob.velocity.set((slideX / slideLength) * horizontalSpeed, 0, (slideZ / slideLength) * horizontalSpeed)
+  }
   if (!canSlideX && !canSlideZ) mob.pathRefreshAt = 0
 }
 
@@ -1461,6 +1562,13 @@ function moveMatryoshkaWithGroundSteps(mob: MatryoshkaMob, delta: number, now: n
   const stepDelta = delta / stepCount
   for (let stepIndex = 0; stepIndex < stepCount; stepIndex += 1) {
     groundMatryoshkaMob(mob)
+    const nextPosition = mob.object.position.clone().add(new THREE.Vector3(mob.velocity.x * stepDelta, 0, mob.velocity.z * stepDelta))
+    if (mob.state === 'wander' && isMatryoshkaWallPathBlocked(mob.object.position, nextPosition)) {
+      mob.velocity.set(0, 0, 0)
+      mob.route = []
+      mob.pathRefreshAt = 0
+      return
+    }
     moveMatryoshkaWithVehicleSlide(mob, stepDelta, now + stepIndex * stepDelta)
     groundMatryoshkaMob(mob)
   }
@@ -2167,6 +2275,8 @@ const pistolSoundUrl = new URL('./assets/sounds/freesound_community-9mm-pistol-s
 const gunshotAudioContext = new AudioContext()
 let gunshotBuffer: AudioBuffer | null = null
 let trueCarSoundBuffer: AudioBuffer | null = null
+let runningSoundBuffer: AudioBuffer | null = null
+let runningSoundSource: AudioBufferSourceNode | null = null
 let soundVolumeMultiplier = 0.5
 void fetch(pistolSoundUrl)
   .then((response) => response.arrayBuffer())
@@ -2179,6 +2289,15 @@ void fetch(trueCarSoundUrl)
   .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
   .then((buffer) => { trueCarSoundBuffer = buffer })
   .catch((error: unknown) => console.error('True car audio failed to load.', error))
+const runningSoundUrl = new URL('./assets/sounds/freeeverythingxx-running-on-concrete-268478.mp3', import.meta.url).href
+void fetch(runningSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => {
+    runningSoundBuffer = buffer
+    detectTwoFootstepClipDuration(buffer)
+  })
+  .catch((error: unknown) => console.error('Running audio failed to load.', error))
 
 function resolveWeaponForMode(_mode: ShootingMode): WeaponId {
   return 'pistol'
@@ -2266,11 +2385,42 @@ function warmGunshotAudio(): void {
   if (gunshotAudioContext.state === 'suspended') void gunshotAudioContext.resume()
 }
 
+function playRunningSound(): void {
+  if (!runningSoundBuffer || runningSoundSource) return
+  const startRunningSound = (): void => {
+    if (!runningSoundBuffer || runningSoundSource) return
+    const source = gunshotAudioContext.createBufferSource()
+    const gain = gunshotAudioContext.createGain()
+    source.buffer = runningSoundBuffer
+    source.loop = true
+    source.loopStart = runningFootstepLoopStart
+    source.loopEnd = runningFootstepClipDuration
+    gain.gain.value = soundVolumeMultiplier
+    source.connect(gain)
+    gain.connect(gunshotAudioContext.destination)
+    source.onended = () => {
+      if (runningSoundSource === source) runningSoundSource = null
+    }
+    runningSoundSource = source
+    source.start(0, runningFootstepLoopStart)
+  }
+  if (gunshotAudioContext.state === 'running') startRunningSound()
+  else void gunshotAudioContext.resume().then(startRunningSound).catch((error: unknown) => console.error('Running audio playback failed.', error))
+}
+
+function stopRunningSound(): void {
+  if (!runningSoundSource) return
+  runningSoundSource.stop()
+  runningSoundSource.disconnect()
+  runningSoundSource = null
+}
+
 function playTrueCarSound(): void {
-  if (!trueCarSoundBuffer || !trueCar || !keyPickupCollected) return
+  if (!trueCar || !keyPickupCollected) return
   trueCarBounds.setFromObject(trueCar)
   trueCarBounds.getCenter(trueCarWorldPosition)
   alertMatryoshkasToSound(trueCarWorldPosition, 'car')
+  if (!trueCarSoundBuffer) return
 
   const source = gunshotAudioContext.createBufferSource()
   const gain = gunshotAudioContext.createGain()
@@ -3629,7 +3779,7 @@ function fireShot(): void {
   applyRecoil()
   shotOrigin.copy(getMuzzleWorldPosition())
   camera.getWorldPosition(cameraOrigin)
-  alertMatryoshkasToSound(cameraOrigin)
+  alertMatryoshkasToSound(cameraOrigin, 'player', true)
   camera.getWorldDirection(shotDirection)
   cameraRight.setFromMatrixColumn(camera.matrixWorld, 0)
   cameraUp.setFromMatrixColumn(camera.matrixWorld, 1)
@@ -3693,7 +3843,7 @@ function render(): void {
     direction.set(Number(keys.has('KeyD')) - Number(keys.has('KeyA')), 0, Number(keys.has('KeyW')) - Number(keys.has('KeyS')))
     if (direction.lengthSq() > 0) {
       direction.normalize()
-      const isRunning = keys.has('ShiftLeft') || keys.has('ShiftRight')
+      const isRunning = keys.has('KeyW') && (keys.has('ShiftLeft') || keys.has('ShiftRight'))
       movement.copy(direction).multiplyScalar((isRunning ? playerRunSpeed : playerWalkSpeed) * delta)
       movePlayerWithCollision(movement)
     }
@@ -3714,16 +3864,21 @@ function render(): void {
   updateTrueCarSoundIndicator()
 
   const isMoving = controls.isLocked && direction.lengthSq() > 0
-  const isRunning = isMoving && (keys.has('ShiftLeft') || keys.has('ShiftRight'))
-  if (isRunning && elapsed - lastFootstepSoundAt >= 0.18) {
-    alertMatryoshkasToSound(camera.position)
-    lastFootstepSoundAt = elapsed
+  const isRunning = isMoving && keys.has('KeyW') && (keys.has('ShiftLeft') || keys.has('ShiftRight'))
+  if (isRunning) {
+    playRunningSound()
+    if (elapsed - lastFootstepSoundAt >= 0.18) {
+      alertMatryoshkasToSound(camera.position)
+      lastFootstepSoundAt = elapsed
+    }
+  } else {
+    stopRunningSound()
   }
-  if (isMoving) movementBobPhase += delta * (isRunning ? 13 : 7)
+  if (isMoving) movementBobPhase += delta * (isRunning ? Math.PI * 2 / runningFootstepInterval : 7)
   else movementBobPhase += delta * 2
   if (controls.isLocked && !trueCarEntered && isRunning) {
     const bobStrength = 0.075
-    cameraBobOffset = Math.sin(movementBobPhase * 2) * bobStrength
+    cameraBobOffset = Math.sin(movementBobPhase) * bobStrength
     camera.position.y += cameraBobOffset
     const bobRoll = Math.sin(movementBobPhase) * (isRunning ? 0.018 : 0.006)
     cameraBobQuaternion.setFromAxisAngle(cameraBobAxis, bobRoll)
@@ -3745,8 +3900,8 @@ function render(): void {
   const crosshairGap = spreadPixels * configuredGapScale
   crosshair.style.setProperty('--crosshair-gap', `${crosshairGap}px`)
   weaponSwayFactor += ((isMoving ? 1 : 0) - weaponSwayFactor) * Math.min(1, delta * 10)
-  const swayAmount = weaponSwayFactor * (aiming ? 0.003 : 0.008) * (isRunning ? 1.65 : 1)
-  const weaponSwayRate = isRunning ? 13 : 7
+  const swayAmount = weaponSwayFactor * (aiming ? 0.003 : 0.008) * (isRunning ? 0.75 : 1)
+  const weaponSwayRate = isRunning ? 5 : 7
   const recoilEase = 1 - Math.exp(-38 * delta)
   const recoilPitchStep = (recoilPitch - appliedRecoilPitch) * recoilEase
   if (Math.abs(recoilPitchStep) > 0.000001) {
