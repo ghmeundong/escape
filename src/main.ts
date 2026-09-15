@@ -633,6 +633,7 @@ function triggerPlayerDeath(): void {
   controls.unlock()
   stopRunningSound()
   stopHeartbeatSound()
+  void deathSoundReady.then(playDeathSound)
   keys.clear()
   matryoshkaMobs.forEach((mob) => { mob.velocity.set(0, 0, 0); mob.route = [] })
 }
@@ -1245,6 +1246,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
           : 'wander'
     const previousState = mob.state
     if (nextState !== mob.state) {
+      if (nextState === 'chase') void chaseSoundReady.then(playChaseSound)
       mob.state = nextState
       if (nextState === 'chase') mob.chaseNetwork = mob.isClone ? 'yellow' : 'blue'
       mob.route = []
@@ -2312,6 +2314,9 @@ let trueCarSoundBuffer: AudioBuffer | null = null
 let runningSoundBuffer: AudioBuffer | null = null
 let runningSoundSource: AudioBufferSourceNode | null = null
 let soundVolumeMultiplier = 1
+let chaseSoundBuffer: AudioBuffer | null = null
+let lastChaseSoundAt = -Infinity
+let deathSoundBuffer: AudioBuffer | null = null
 let weaponAmmo = 0
 const weaponMagazineSize = 7
 let weaponReloading = false
@@ -2373,6 +2378,18 @@ const dryFireSoundReady = fetch(dryFireSoundUrl)
   .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
   .then((buffer) => { dryFireSoundBuffer = buffer })
   .catch((error: unknown) => console.error('Dry fire audio failed to load.', error))
+const chaseSoundUrl = new URL('./assets/sounds/universfield-scary-string-tension-454849.mp3', import.meta.url).href
+const chaseSoundReady = fetch(chaseSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => { chaseSoundBuffer = buffer })
+  .catch((error: unknown) => console.error('Chase audio failed to load.', error))
+const deathSoundUrl = new URL('./assets/sounds/universfield-horror-impact-454854.mp3', import.meta.url).href
+const deathSoundReady = fetch(deathSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => { deathSoundBuffer = buffer })
+  .catch((error: unknown) => console.error('Death audio failed to load.', error))
 const trueCarSoundUrl = new URL('./assets/sounds/universfield-car-horn-02-153260.mp3', import.meta.url).href
 void fetch(trueCarSoundUrl)
   .then((response) => response.arrayBuffer())
@@ -2480,6 +2497,33 @@ function playDryFire(): void {
   source.connect(gain)
   gain.connect(gunshotAudioContext.destination)
   source.start()
+}
+
+function playChaseSound(): void {
+  if (!chaseSoundBuffer) return
+  const now = performance.now() / 1000
+  if (now - lastChaseSoundAt < 0.35) return
+  lastChaseSoundAt = now
+  const source = gunshotAudioContext.createBufferSource()
+  const gain = gunshotAudioContext.createGain()
+  source.buffer = chaseSoundBuffer
+  gain.gain.value = soundVolumeMultiplier
+  source.connect(gain)
+  gain.connect(gunshotAudioContext.destination)
+  source.start()
+}
+
+function playDeathSound(): void {
+  if (!deathSoundBuffer) return
+  const source = gunshotAudioContext.createBufferSource()
+  const gain = gunshotAudioContext.createGain()
+  source.buffer = deathSoundBuffer
+  gain.gain.value = soundVolumeMultiplier
+  source.connect(gain)
+  gain.connect(gunshotAudioContext.destination)
+  if (gunshotAudioContext.state === 'suspended') {
+    void gunshotAudioContext.resume().then(() => source.start()).catch((error: unknown) => console.error('Death audio playback failed.', error))
+  } else source.start()
 }
 
 function startWeaponReload(): void {
