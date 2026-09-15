@@ -28,7 +28,7 @@ app.innerHTML = `
         <div class="start-screen-content"><h1>ESCAPE</h1><button class="start-play-button" id="start-play-button" type="button">PLAY</button></div>
       </section>
       <section class="episode-screen" aria-label="Episode selection">
-        <div class="episode-screen-content"><p>EPISODE SELECT</p><h1>ESCAPE</h1><div class="episode-card-grid"><div class="episode-card-shell"><button class="episode-card" id="parking-lot-episode-button" type="button"><canvas class="episode-card-preview" id="parking-preview-canvas" aria-label="Parking lot 3D preview"></canvas></button><strong>PARKING LOT</strong></div></div></div>
+        <div class="episode-screen-content"><p>EPISODE SELECT</p><h1>ESCAPE</h1><div class="episode-card-grid"><div class="episode-card-shell"><button class="episode-card" id="parking-lot-episode-button" type="button"><canvas class="episode-card-preview" id="parking-preview-canvas" aria-label="Parking lot 3D preview"></canvas></button><strong>PARKING LOT</strong></div><div class="episode-card-shell"><button class="episode-card" id="store-episode-button" type="button"><canvas class="episode-card-preview" id="store-preview-canvas" aria-label="Store 3D preview"></canvas></button><strong>STORE</strong></div></div></div>
       </section>
       <canvas id="range-canvas" aria-label="Escape game view"></canvas>
       <div class="crosshair" aria-hidden="true"><span></span><i></i><b></b><em></em></div>
@@ -81,6 +81,8 @@ const startPlayButton = document.querySelector<HTMLButtonElement>('#start-play-b
 const episodeScreen = document.querySelector<HTMLElement>('.episode-screen')!
 const parkingLotEpisodeButton = document.querySelector<HTMLButtonElement>('#parking-lot-episode-button')!
 const parkingPreviewCanvas = document.querySelector<HTMLCanvasElement>('#parking-preview-canvas')!
+const storeEpisodeButton = document.querySelector<HTMLButtonElement>('#store-episode-button')!
+const storePreviewCanvas = document.querySelector<HTMLCanvasElement>('#store-preview-canvas')!
 const crosshair = document.querySelector<HTMLElement>('.crosshair')!
 const hitMarker = document.querySelector<HTMLElement>('.hit-marker')!
 const fearOverlay = document.querySelector<HTMLElement>('.fear-overlay')!
@@ -3476,6 +3478,27 @@ function closeMenu(): void {
 function enterGame(): void {
   startScreen.classList.remove('is-visible')
   episodeScreen.classList.remove('is-visible')
+  if (parkingLotRoot) parkingLotRoot.visible = true
+  if (storeRoot) storeRoot.visible = false
+  parkedCars.forEach((car) => { car.visible = true })
+  isInStore = false
+  closeMenu()
+  lockPointer()
+  if (gunshotAudioContext.state === 'suspended') void gunshotAudioContext.resume()
+  void heartbeatSoundReady.then(playHeartbeatSound)
+}
+
+function enterStoreGame(): void {
+  if (!storeRoot) return
+  startScreen.classList.remove('is-visible')
+  episodeScreen.classList.remove('is-visible')
+  if (parkingLotRoot) parkingLotRoot.visible = false
+  parkedCars.forEach((car) => { car.visible = false })
+  storeRoot.visible = true
+  isInStore = true
+  camera.position.copy(storeSpawnPosition)
+  camera.lookAt(storeEntryPosition)
+  camera.updateMatrixWorld(true)
   closeMenu()
   lockPointer()
   if (gunshotAudioContext.state === 'suspended') void gunshotAudioContext.resume()
@@ -3487,9 +3510,10 @@ startPlayButton.addEventListener('click', () => {
   episodeScreen.classList.add('is-visible')
 })
 parkingLotEpisodeButton.addEventListener('click', enterGame)
+storeEpisodeButton.addEventListener('click', enterStoreGame)
 canvas.addEventListener('click', enterGame)
 settingsButton.addEventListener('click', () => {
-  if (startScreen.classList.contains('is-visible')) {
+  if (startScreen.classList.contains('is-visible') || episodeScreen.classList.contains('is-visible')) {
     showMenuView('settings')
     settingsOverlay.classList.add('is-open')
     settingsOverlay.setAttribute('aria-hidden', 'false')
@@ -3554,6 +3578,37 @@ parkingPreviewRenderer.setAnimationLoop(() => {
   parkingPreviewRenderer.render(parkingPreviewScene, parkingPreviewCamera)
 })
 
+const storePreviewScene = new THREE.Scene()
+storePreviewScene.background = new THREE.Color('#10171a')
+storePreviewScene.add(new THREE.HemisphereLight('#dce6e2', '#111619', 2.4))
+const storePreviewLight = new THREE.DirectionalLight('#fff3d4', 3.5)
+storePreviewLight.position.set(-5, 9, 7)
+storePreviewScene.add(storePreviewLight)
+const storePreviewCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
+storePreviewCamera.position.set(7, 6, 7)
+storePreviewCamera.lookAt(0, 2, 0)
+const storePreviewRenderer = new THREE.WebGLRenderer({ canvas: storePreviewCanvas, antialias: true, alpha: false })
+storePreviewRenderer.setPixelRatio(1)
+const storePreviewGroup = new THREE.Group()
+storePreviewScene.add(storePreviewGroup)
+let storePreviewReady = false
+storePreviewRenderer.setAnimationLoop(() => {
+  const width = storePreviewCanvas.clientWidth
+  const height = storePreviewCanvas.clientHeight
+  if (!width || !height) return
+  storePreviewRenderer.setSize(Math.max(160, Math.floor(width * 0.75)), Math.max(160, Math.floor(height * 0.75)), false)
+  storePreviewCamera.aspect = width / height
+  storePreviewCamera.updateProjectionMatrix()
+  if (!storePreviewReady && storeRoot) {
+    const storeClone = storeRoot.clone(true)
+    storeClone.position.set(0, 0, 0)
+    storePreviewGroup.add(storeClone)
+    storePreviewReady = true
+  }
+  storePreviewGroup.rotation.y += 0.0015
+  storePreviewRenderer.render(storePreviewScene, storePreviewCamera)
+})
+
 const matryoshkaPreviewScene = new THREE.Scene()
 matryoshkaPreviewScene.background = new THREE.Color('#080b0d')
 matryoshkaPreviewScene.add(new THREE.HemisphereLight('#d9e0df', '#111519', 2.2))
@@ -3585,7 +3640,7 @@ matryoshkaPreviewRenderer.setAnimationLoop(() => {
   matryoshkaPreviewRenderer.setSize(width, height, false)
   matryoshkaPreviewCamera.aspect = width / height
   matryoshkaPreviewCamera.updateProjectionMatrix()
-  matryoshkaPreviewGroup.rotation.y += 0.006
+  matryoshkaPreviewGroup.rotation.y -= 0.006
   matryoshkaPreviewRenderer.render(matryoshkaPreviewScene, matryoshkaPreviewCamera)
 })
 
