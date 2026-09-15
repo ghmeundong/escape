@@ -24,8 +24,11 @@ app.innerHTML = `
     <section class="range-shell">
       <div class="range" aria-label="Escape parking environment">
       <section class="start-screen is-visible" aria-label="Start Escape">
-        <h1>ESCAPE</h1>
-        <button class="start-play-button" id="start-play-button" type="button">PLAY</button>
+        <canvas id="matryoshka-preview-canvas" aria-label="Rotating Matryoshka preview"></canvas>
+        <div class="start-screen-content"><h1>ESCAPE</h1><button class="start-play-button" id="start-play-button" type="button">PLAY</button></div>
+      </section>
+      <section class="episode-screen" aria-label="Episode selection">
+        <div class="episode-screen-content"><p>EPISODE SELECT</p><h1>ESCAPE</h1><div class="episode-card-grid"><div class="episode-card-shell"><button class="episode-card" id="parking-lot-episode-button" type="button"><canvas class="episode-card-preview" id="parking-preview-canvas" aria-label="Parking lot 3D preview"></canvas></button><strong>PARKING LOT</strong></div></div></div>
       </section>
       <canvas id="range-canvas" aria-label="Escape game view"></canvas>
       <div class="crosshair" aria-hidden="true"><span></span><i></i><b></b><em></em></div>
@@ -72,8 +75,12 @@ app.innerHTML = `
 `
 
 const canvas = document.querySelector<HTMLCanvasElement>('#range-canvas')!
+const matryoshkaPreviewCanvas = document.querySelector<HTMLCanvasElement>('#matryoshka-preview-canvas')!
 const startScreen = document.querySelector<HTMLElement>('.start-screen')!
 const startPlayButton = document.querySelector<HTMLButtonElement>('#start-play-button')!
+const episodeScreen = document.querySelector<HTMLElement>('.episode-screen')!
+const parkingLotEpisodeButton = document.querySelector<HTMLButtonElement>('#parking-lot-episode-button')!
+const parkingPreviewCanvas = document.querySelector<HTMLCanvasElement>('#parking-preview-canvas')!
 const crosshair = document.querySelector<HTMLElement>('.crosshair')!
 const hitMarker = document.querySelector<HTMLElement>('.hit-marker')!
 const fearOverlay = document.querySelector<HTMLElement>('.fear-overlay')!
@@ -3358,6 +3365,17 @@ function handleKeyDown(event: KeyboardEvent): void {
     return
   }
   if (event.code === 'Escape') {
+    if (episodeScreen.classList.contains('is-visible')) {
+      event.preventDefault()
+      episodeScreen.classList.remove('is-visible')
+      startScreen.classList.add('is-visible')
+      return
+    }
+    if (startScreen.classList.contains('is-visible')) {
+      event.preventDefault()
+      if (window.confirm('EXIT ESCAPE?')) exitApplication()
+      return
+    }
     if (controls.isLocked) {
       event.preventDefault()
       controls.unlock()
@@ -3457,16 +3475,25 @@ function closeMenu(): void {
 
 function enterGame(): void {
   startScreen.classList.remove('is-visible')
+  episodeScreen.classList.remove('is-visible')
   closeMenu()
   lockPointer()
   if (gunshotAudioContext.state === 'suspended') void gunshotAudioContext.resume()
   void heartbeatSoundReady.then(playHeartbeatSound)
 }
 
-startPlayButton.addEventListener('click', enterGame)
+startPlayButton.addEventListener('click', () => {
+  startScreen.classList.remove('is-visible')
+  episodeScreen.classList.add('is-visible')
+})
+parkingLotEpisodeButton.addEventListener('click', enterGame)
 canvas.addEventListener('click', enterGame)
 settingsButton.addEventListener('click', () => {
-  openMenu()
+  if (startScreen.classList.contains('is-visible')) {
+    showMenuView('settings')
+    settingsOverlay.classList.add('is-open')
+    settingsOverlay.setAttribute('aria-hidden', 'false')
+  } else openMenu()
 })
 settingsClose.addEventListener('click', () => {
   if (window.electronAPI && !startScreen.classList.contains('is-visible')) enterGame()
@@ -3495,6 +3522,72 @@ function getRenderPixelRatio(): number {
 let renderer = new THREE.WebGLRenderer({ canvas, antialias: antialiasingSetting.checked, powerPreference: 'high-performance' })
 renderer.setPixelRatio(getRenderPixelRatio())
 renderer.shadowMap.enabled = false
+
+const parkingPreviewScene = new THREE.Scene()
+parkingPreviewScene.background = new THREE.Color('#10171a')
+parkingPreviewScene.add(new THREE.HemisphereLight('#dce6e2', '#111619', 2.4))
+const parkingPreviewLight = new THREE.DirectionalLight('#fff3d4', 3.5)
+parkingPreviewLight.position.set(-90, 140, 80)
+parkingPreviewScene.add(parkingPreviewLight)
+const parkingPreviewCamera = new THREE.PerspectiveCamera(38, 1, 1, 600)
+parkingPreviewCamera.position.set(36, 40, 36)
+parkingPreviewCamera.lookAt(0, 0, 0)
+const parkingPreviewRenderer = new THREE.WebGLRenderer({ canvas: parkingPreviewCanvas, antialias: true, alpha: false })
+parkingPreviewRenderer.setPixelRatio(1)
+const parkingPreviewGroup = new THREE.Group()
+parkingPreviewScene.add(parkingPreviewGroup)
+let parkingPreviewReady = false
+parkingPreviewRenderer.setAnimationLoop(() => {
+  const width = parkingPreviewCanvas.clientWidth
+  const height = parkingPreviewCanvas.clientHeight
+  if (!width || !height) return
+  parkingPreviewRenderer.setSize(Math.max(160, Math.floor(width * 0.75)), Math.max(160, Math.floor(height * 0.75)), false)
+  parkingPreviewCamera.aspect = width / height
+  parkingPreviewCamera.updateProjectionMatrix()
+  if (!parkingPreviewReady && parkingLotRoot && parkedCarsReady) {
+    const parkingClone = parkingLotRoot.clone(true)
+    parkingPreviewGroup.add(parkingClone)
+    parkedCars.forEach((car) => parkingPreviewGroup.add(car.clone(true)))
+    parkingPreviewReady = true
+  }
+  parkingPreviewGroup.rotation.y += 0.0015
+  parkingPreviewRenderer.render(parkingPreviewScene, parkingPreviewCamera)
+})
+
+const matryoshkaPreviewScene = new THREE.Scene()
+matryoshkaPreviewScene.background = new THREE.Color('#080b0d')
+matryoshkaPreviewScene.add(new THREE.HemisphereLight('#d9e0df', '#111519', 2.2))
+const matryoshkaPreviewLight = new THREE.DirectionalLight('#fff4dc', 4)
+matryoshkaPreviewLight.position.set(-3, 5, 4)
+matryoshkaPreviewScene.add(matryoshkaPreviewLight)
+const matryoshkaPreviewCamera = new THREE.PerspectiveCamera(28, 1, 0.01, 30)
+matryoshkaPreviewCamera.position.set(0, 2.4, 8.5)
+matryoshkaPreviewCamera.lookAt(0, 1.8, 0)
+const matryoshkaPreviewRenderer = new THREE.WebGLRenderer({ canvas: matryoshkaPreviewCanvas, antialias: true, alpha: false })
+matryoshkaPreviewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+const matryoshkaPreviewGroup = new THREE.Group()
+matryoshkaPreviewScene.add(matryoshkaPreviewGroup)
+const matryoshkaPreviewUrl = new URL('./assets/matryoshka-doll/matryoshka_doll.glb', import.meta.url).href
+new GLTFLoader().load(matryoshkaPreviewUrl, (gltf) => {
+  const previewModel = gltf.scene
+  const bounds = new THREE.Box3().setFromObject(previewModel)
+  const size = bounds.getSize(new THREE.Vector3())
+  previewModel.scale.setScalar(5.4 / Math.max(size.y, 0.01))
+  previewModel.updateMatrixWorld(true)
+  const scaledBounds = new THREE.Box3().setFromObject(previewModel)
+  previewModel.position.y -= scaledBounds.min.y
+  matryoshkaPreviewGroup.add(previewModel)
+})
+matryoshkaPreviewRenderer.setAnimationLoop(() => {
+  const width = matryoshkaPreviewCanvas.clientWidth
+  const height = matryoshkaPreviewCanvas.clientHeight
+  if (!width || !height) return
+  matryoshkaPreviewRenderer.setSize(width, height, false)
+  matryoshkaPreviewCamera.aspect = width / height
+  matryoshkaPreviewCamera.updateProjectionMatrix()
+  matryoshkaPreviewGroup.rotation.y += 0.006
+  matryoshkaPreviewRenderer.render(matryoshkaPreviewScene, matryoshkaPreviewCamera)
+})
 
 function refreshWeaponRender(): void {
   currentWeaponModel?.updateMatrixWorld(true)
@@ -4168,6 +4261,8 @@ function createImpactSpark(position: THREE.Vector3, normal: THREE.Vector3, incom
 function fireShot(): void {
   if (trueCarEntered || !weaponPickupCollected || weaponReloading) return
   if (weaponAmmo <= 0) {
+    camera.getWorldPosition(cameraOrigin)
+    alertMatryoshkasToSound(cameraOrigin)
     void dryFireSoundReady.then(playDryFire)
     return
   }
@@ -4222,6 +4317,10 @@ function render(): void {
   }
   camera.position.y -= cameraBobOffset
   cameraBobOffset = 0
+  if (startScreen.classList.contains('is-visible') || episodeScreen.classList.contains('is-visible')) {
+    renderer.render(scene, camera)
+    return
+  }
   updateProjectiles(performance.now() / 1000, delta)
   updateMatryoshkaMobs(performance.now() / 1000, delta)
   if (playerDeathActive) {

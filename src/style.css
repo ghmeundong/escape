@@ -64,11 +64,31 @@ button { font: inherit; }
 .electron-app .settings-group label { font-size: clamp(11px, .7vw, 14px); }
 .electron-app .settings-group select { padding: 9px; font-size: clamp(11px, .7vw, 14px); }
 #range-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.start-screen { position: absolute; z-index: 5; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: radial-gradient(ellipse at center, rgba(17, 23, 29, .28), rgba(5, 8, 10, .82)); }
-.start-screen h1 { margin: 0; color: #f1f4f5; font-size: clamp(42px, 8vw, 108px); font-weight: 400; letter-spacing: 14px; text-indent: 14px; text-shadow: 0 8px 30px rgba(0, 0, 0, .45); }
+.start-screen { position: absolute; z-index: 5; inset: 0; overflow: hidden; background: #080b0d; }
+.start-screen::after { position: absolute; z-index: 1; inset: 0; pointer-events: none; content: ''; background: linear-gradient(90deg, rgba(5, 8, 10, .8), rgba(5, 8, 10, .08) 55%, rgba(5, 8, 10, .72)), linear-gradient(0deg, rgba(5, 8, 10, .72), transparent 45%, rgba(5, 8, 10, .38)); }
+.start-screen-content { position: absolute; z-index: 2; left: clamp(28px, 8vw, 110px); bottom: clamp(34px, 9vw, 96px); }
+.start-screen h1 { margin: 0 0 22px; color: #f1f4f5; font-size: clamp(42px, 8vw, 108px); font-weight: 400; letter-spacing: 14px; text-indent: 14px; text-shadow: 0 8px 30px rgba(0, 0, 0, .45); }
+.start-screen #matryoshka-preview-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .start-play-button { min-width: 136px; padding: 12px 24px; border: 1px solid #82909a; color: #f1f4f5; background: rgba(17, 23, 29, .72); cursor: pointer; font-size: 11px; letter-spacing: 3px; transition: border-color .2s, color .2s, background .2s, transform .2s; }
 .start-play-button:hover { border-color: #ffffff; background: rgba(255, 255, 255, .14); transform: translateY(-2px); }
 .start-screen:not(.is-visible) { display: none; }
+.episode-screen { position: absolute; z-index: 5; inset: 0; display: none; overflow: auto; background: radial-gradient(circle at 78% 18%, rgba(104, 126, 119, .18), transparent 28%), linear-gradient(135deg, #0b1013, #151c20 58%, #202a2b); }
+.episode-screen { scrollbar-color: #6f827c rgba(17, 23, 29, .45); scrollbar-width: thin; }
+.episode-screen::-webkit-scrollbar { width: 9px; height: 9px; }
+.episode-screen::-webkit-scrollbar-track { margin: 12px 0; background: rgba(17, 23, 29, .45); }
+.episode-screen::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 0; background: #6f827c; background-clip: padding-box; }
+.episode-screen::-webkit-scrollbar-thumb:hover { background: #b6c9c0; background-clip: padding-box; }
+.episode-screen.is-visible { display: block; }
+.episode-screen-content { width: min(1120px, calc(100% - 64px)); min-height: 100%; margin: 0 auto; padding: clamp(34px, 7vw, 82px) clamp(28px, 5vw, 72px); color: #f1f4f5; }
+.episode-screen-content > p { margin: 0 0 12px; color: #9badab; font-size: 10px; letter-spacing: 3px; }
+.episode-screen-content h1 { margin: 0 0 42px; font-size: clamp(30px, 5vw, 58px); font-weight: 400; letter-spacing: 8px; }
+.episode-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 240px)); gap: 28px 24px; align-items: start; }
+.episode-card-shell { width: 100%; }
+.episode-card { display: block; width: 100%; aspect-ratio: 4 / 3; padding: 0; border: 1px solid #53616b; color: #f1f4f5; background: #11171d; cursor: pointer; overflow: hidden; transition: border-color .2s, transform .2s, background .2s, box-shadow .2s; }
+.episode-card:hover { border-color: #d9e6df; background: #182126; transform: translateY(-4px); box-shadow: 0 16px 30px rgba(0, 0, 0, .24); }
+.episode-card-preview { display: block; width: 100%; height: 100%; image-rendering: auto; background: #10171a; }
+.episode-card-shell > strong { display: block; }
+.episode-card-shell > strong { margin-top: -16px; padding-left: 12px; font-size: 11px; letter-spacing: 1.5px; }
 .episode-fade-overlay { position: absolute; z-index: 7; inset: 0; background: #000; opacity: 0; pointer-events: none; }
 .episode-fade-overlay.is-fading { opacity: 1; transition: opacity 10s linear; }
 .fear-overlay, .death-overlay { position: absolute; z-index: 6; inset: 0; pointer-events: none; opacity: 0; transition: opacity .25s ease; }
