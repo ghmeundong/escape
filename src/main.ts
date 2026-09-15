@@ -23,6 +23,10 @@ app.innerHTML = `
   <main class="escape-app">
     <section class="range-shell">
       <div class="range" aria-label="Escape parking environment">
+      <section class="start-screen is-visible" aria-label="Start Escape">
+        <h1>ESCAPE</h1>
+        <button class="start-play-button" id="start-play-button" type="button">PLAY</button>
+      </section>
       <canvas id="range-canvas" aria-label="Escape game view"></canvas>
       <div class="crosshair" aria-hidden="true"><span></span><i></i><b></b><em></em></div>
       <div class="hit-marker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -68,6 +72,8 @@ app.innerHTML = `
 `
 
 const canvas = document.querySelector<HTMLCanvasElement>('#range-canvas')!
+const startScreen = document.querySelector<HTMLElement>('.start-screen')!
+const startPlayButton = document.querySelector<HTMLButtonElement>('#start-play-button')!
 const crosshair = document.querySelector<HTMLElement>('.crosshair')!
 const hitMarker = document.querySelector<HTMLElement>('.hit-marker')!
 const fearOverlay = document.querySelector<HTMLElement>('.fear-overlay')!
@@ -483,6 +489,8 @@ let keyPickupCollected = false
 let trueCar: THREE.Object3D | null = null
 let trueCarEntered = false
 let trueCarSoundPlaying = false
+let carEndingShakeStartedAt = -Infinity
+let carEndingShakePeaks: number[] = []
 type MatryoshkaMobState = 'wander' | 'investigate' | 'chase'
 type MatryoshkaSoundSource = 'player' | 'car'
 type MatryoshkaWaypointNetwork = 'yellow' | 'blue'
@@ -616,6 +624,7 @@ function triggerPlayerDeath(): void {
   deathScreen.classList.add('is-visible')
   fearOverlay.classList.remove('is-visible')
   controls.unlock()
+  stopRunningSound()
   keys.clear()
   matryoshkaMobs.forEach((mob) => { mob.velocity.set(0, 0, 0); mob.route = [] })
 }
@@ -628,8 +637,13 @@ function exitApplication(): void {
   window.close()
 }
 
+function returnToHome(): void {
+  if (controls.isLocked) controls.unlock()
+  window.location.reload()
+}
+
 deathRetryButton.addEventListener('click', () => window.location.reload())
-deathExitButton.addEventListener('click', exitApplication)
+deathExitButton.addEventListener('click', returnToHome)
 
 function getMatryoshkaGroundHit(x: number, z: number, maxGroundY = Infinity): THREE.Intersection | undefined {
   if (!parkingBounds || !parkingLotRoot) return undefined
@@ -1172,7 +1186,7 @@ function recoverMatryoshkaMob(mob: MatryoshkaMob): void {
 
 function updateMatryoshkaMobs(now: number, delta: number): void {
   if (!parkingLotRoot || matryoshkaWaypoints.length === 0) return
-  if (settingsOverlay.classList.contains('is-open')) {
+  if (startScreen.classList.contains('is-visible') || settingsOverlay.classList.contains('is-open')) {
     matryoshkaMobs.forEach((mob) => { mob.velocity.set(0, 0, 0) })
     return
   }
@@ -2274,6 +2288,7 @@ const muzzleLocalPosition = new THREE.Vector3()
 const pistolSoundUrl = new URL('./assets/sounds/freesound_community-9mm-pistol-shoot-short-reverb-7152.mp3', import.meta.url).href
 const gunshotAudioContext = new AudioContext()
 let gunshotBuffer: AudioBuffer | null = null
+let knockSoundBuffer: AudioBuffer | null = null
 let trueCarSoundBuffer: AudioBuffer | null = null
 let runningSoundBuffer: AudioBuffer | null = null
 let runningSoundSource: AudioBufferSourceNode | null = null
@@ -2283,6 +2298,22 @@ void fetch(pistolSoundUrl)
   .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
   .then((buffer) => { gunshotBuffer = buffer })
   .catch((error: unknown) => console.error('Gunshot audio failed to load.', error))
+const knockSoundUrl = new URL('./assets/sounds/universfield-door-knock-291150.mp3', import.meta.url).href
+const knockSoundReady = fetch(knockSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => { knockSoundBuffer = buffer })
+  .catch((error: unknown) => console.error('Knock audio failed to load.', error))
+const carBreakSoundUrl = new URL('./assets/sounds/soumages-iron-smash-with-debris-351841.mp3', import.meta.url).href
+let carBreakSoundBuffer: AudioBuffer | null = null
+const carBreakSoundReady = fetch(carBreakSoundUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => {
+    carBreakSoundBuffer = buffer
+    carEndingShakePeaks = detectCarBreakPeaks(buffer)
+  })
+  .catch((error: unknown) => console.error('Car break audio failed to load.', error))
 const trueCarSoundUrl = new URL('./assets/sounds/universfield-car-horn-02-153260.mp3', import.meta.url).href
 void fetch(trueCarSoundUrl)
   .then((response) => response.arrayBuffer())
@@ -2379,6 +2410,62 @@ function playGunshot(): void {
   }
   if (gunshotAudioContext.state === 'running') startGunshot()
   else void gunshotAudioContext.resume().then(startGunshot).catch((error: unknown) => console.error('Gunshot audio playback failed.', error))
+}
+
+function playKnockSound(onEnded?: () => void): void {
+  if (!knockSoundBuffer || !hitSoundEnabled) return
+  const startKnock = (): void => {
+    if (!knockSoundBuffer) return
+    const source = gunshotAudioContext.createBufferSource()
+    const gain = gunshotAudioContext.createGain()
+    source.buffer = knockSoundBuffer
+    gain.gain.value = soundVolumeMultiplier
+    source.connect(gain)
+    gain.connect(gunshotAudioContext.destination)
+    if (onEnded) source.addEventListener('ended', onEnded, { once: true })
+    source.start()
+  }
+  if (gunshotAudioContext.state === 'running') startKnock()
+  else void gunshotAudioContext.resume().then(startKnock).catch((error: unknown) => console.error('Knock audio playback failed.', error))
+}
+
+function detectCarBreakPeaks(buffer: AudioBuffer): number[] {
+  const samples = buffer.getChannelData(0)
+  const windowSize = Math.max(1, Math.floor(buffer.sampleRate * 0.01))
+  const envelope: number[] = []
+  for (let offset = 0; offset < samples.length; offset += windowSize) {
+    let energy = 0
+    const end = Math.min(samples.length, offset + windowSize)
+    for (let index = offset; index < end; index += 1) energy += samples[index] ** 2
+    envelope.push(Math.sqrt(energy / Math.max(1, end - offset)))
+  }
+  const candidates = envelope
+    .map((value, index) => ({ value, time: index * 0.01 }))
+    .filter((candidate, index) => candidate.value >= (envelope[index - 1] ?? 0) && candidate.value >= (envelope[index + 1] ?? 0))
+    .sort((first, second) => second.value - first.value)
+  const peaks: number[] = []
+  for (const candidate of candidates) {
+    if (peaks.every((peak) => Math.abs(peak - candidate.time) >= 0.25)) peaks.push(candidate.time)
+    if (peaks.length === 2) break
+  }
+  return peaks.sort((first, second) => first - second)
+}
+
+function playCarBreakSound(): void {
+  if (!carBreakSoundBuffer || !hitSoundEnabled) return
+  const startCarBreak = (): void => {
+    if (!carBreakSoundBuffer) return
+    const source = gunshotAudioContext.createBufferSource()
+    const gain = gunshotAudioContext.createGain()
+    source.buffer = carBreakSoundBuffer
+    gain.gain.value = soundVolumeMultiplier
+    source.connect(gain)
+    gain.connect(gunshotAudioContext.destination)
+    carEndingShakeStartedAt = performance.now() / 1000
+    source.start()
+  }
+  if (gunshotAudioContext.state === 'running') startCarBreak()
+  else void gunshotAudioContext.resume().then(startCarBreak).catch((error: unknown) => console.error('Car break audio playback failed.', error))
 }
 
 function warmGunshotAudio(): void {
@@ -2544,7 +2631,7 @@ function updatePointerSensitivity(): void {
 }
 
 function handlePointerDown(event: PointerEvent): void {
-  if (event.button === 0 && controls.isLocked) {
+  if (event.button === 0 && controls.isLocked && !trueCarEntered) {
     event.preventDefault()
     if (waypointEditSetting.checked) {
       addMatryoshkaWaypointFromAim()
@@ -2557,7 +2644,7 @@ function handlePointerDown(event: PointerEvent): void {
 }
 
 function handleMouseDown(event: MouseEvent): void {
-  if (event.button === 0 && controls.isLocked && !leftButtonHeld) {
+  if (event.button === 0 && controls.isLocked && !trueCarEntered && !leftButtonHeld) {
     event.preventDefault()
     if (waypointEditSetting.checked) {
       addMatryoshkaWaypointFromAim()
@@ -2866,6 +2953,10 @@ const trueCarClosestPoint = new THREE.Vector3()
 const driverSeatPosition = new THREE.Vector3()
 const driverSeatLookAt = new THREE.Vector3()
 const trueCarWorldQuaternion = new THREE.Quaternion()
+const carEndingBasePosition = new THREE.Vector3()
+const carEndingBaseQuaternion = new THREE.Quaternion()
+const carEndingShakeQuaternion = new THREE.Quaternion()
+const carEndingShakeAxis = new THREE.Vector3(0, 0, 1)
 const driverSeatLeft = new THREE.Vector3(-0.75, 0, 0)
 const driverSeatBack = new THREE.Vector3(0, 0, 0.8)
 const driverSeatViewDistance = 10
@@ -2934,8 +3025,29 @@ function enterTrueCar(): void {
   camera.lookAt(driverSeatLookAt)
   camera.updateMatrixWorld(true)
   trueCarEntered = true
+  carEndingBasePosition.copy(trueCar.position)
+  carEndingBaseQuaternion.copy(trueCar.quaternion)
   trueCarPrompt.hidden = true
   episodeFadeOverlay.classList.add('is-fading')
+  window.setTimeout(() => {
+    void knockSoundReady.then(() => playKnockSound(() => {
+      window.setTimeout(() => {
+        void knockSoundReady.then(() => playKnockSound(() => {
+          window.setTimeout(() => { void carBreakSoundReady.then(playCarBreakSound) }, 2000)
+        }))
+      }, 1000)
+    }))
+  }, 1000)
+  let endingReturnScheduled = false
+  const finishTrueCarEnding = (): void => {
+    if (!trueCarEntered || endingReturnScheduled) return
+    endingReturnScheduled = true
+    window.setTimeout(returnToHome, 1000)
+  }
+  episodeFadeOverlay.addEventListener('transitionend', (event) => {
+    if (event.propertyName === 'opacity') finishTrueCarEnding()
+  }, { once: true })
+  window.setTimeout(finishTrueCarEnding, 10000)
 }
 
 function updateTrueCarSeatPosition(): void {
@@ -3027,7 +3139,7 @@ function handleKeyDown(event: KeyboardEvent): void {
     return
   }
   if (event.code === 'KeyP') {
-    if (controls.isLocked && keyPickupCollected) playTrueCarSound()
+    if (controls.isLocked && keyPickupCollected && !trueCarEntered) playTrueCarSound()
     return
   }
   keys.add(event.code)
@@ -3082,21 +3194,24 @@ function closeMenu(): void {
 }
 
 function enterGame(): void {
+  startScreen.classList.remove('is-visible')
   closeMenu()
   lockPointer()
 }
 
+startPlayButton.addEventListener('click', enterGame)
 canvas.addEventListener('click', enterGame)
 settingsButton.addEventListener('click', () => {
   openMenu()
 })
 settingsClose.addEventListener('click', () => {
-  if (window.electronAPI) enterGame()
+  if (window.electronAPI && !startScreen.classList.contains('is-visible')) enterGame()
   else closeMenu()
 })
 menuSettingsButton.addEventListener('click', () => showMenuView('settings'))
 menuExitButton.addEventListener('click', () => {
-  exitApplication()
+  if (startScreen.classList.contains('is-visible')) exitApplication()
+  else returnToHome()
 })
 settingsOverlay.addEventListener('click', (event) => {
   if (event.target === settingsOverlay) settingsClose.click()
@@ -3213,6 +3328,8 @@ scene.add(grid)
 const gridMaterials = (Array.isArray(grid.material) ? grid.material : [grid.material]) as THREE.LineBasicMaterial[]
 const floorTileSize = 1500
 const floorTilePosition = new THREE.Vector3()
+const lastSafePlayerPosition = new THREE.Vector3()
+let hasSafePlayerPosition = false
 
 function updateInfiniteFloor(): void {
   floorTilePosition.set(
@@ -3236,6 +3353,7 @@ function resolveParkingCollision(): void {
   camera.position.x = THREE.MathUtils.clamp(camera.position.x, parkingBounds.min.x + playerRadius, parkingBounds.max.x - playerRadius)
   camera.position.z = THREE.MathUtils.clamp(camera.position.z, parkingBounds.min.z + playerRadius, parkingBounds.max.z - playerRadius)
 
+  let hasGround = false
   if (parkingLotRoot && verticalVelocity <= 0) {
     parkingGroundRaycaster.set(new THREE.Vector3(camera.position.x, camera.position.y + 8, camera.position.z), new THREE.Vector3(0, -1, 0))
     const groundHit = parkingGroundRaycaster.intersectObject(parkingLotRoot, true).find((intersection) => intersection.point.y <= camera.position.y + 0.7)
@@ -3243,11 +3361,19 @@ function resolveParkingCollision(): void {
       const groundCameraHeight = groundHit.point.y + playerHeight
       const groundGap = camera.position.y - groundCameraHeight
       if (groundGap >= -0.3 && groundGap <= 0.08) {
+        hasGround = true
         camera.position.y = groundCameraHeight
         verticalVelocity = 0
         isGrounded = true
+        lastSafePlayerPosition.copy(camera.position)
+        hasSafePlayerPosition = true
       }
     }
+  }
+  if (!hasGround && verticalVelocity < 0 && camera.position.y < playerHeight - 0.2 && hasSafePlayerPosition) {
+    camera.position.copy(lastSafePlayerPosition)
+    verticalVelocity = 0
+    isGrounded = true
   }
   const playerHeightBounds = new THREE.Vector2(camera.position.y - 0.8, camera.position.y + 0.8)
   const nearbyObstacles = getNearbyParkingObstacles()
@@ -3303,6 +3429,7 @@ function isParkingWallAhead(step: THREE.Vector3): boolean {
   const sampleHeights = [camera.position.y - 1.8, camera.position.y - 0.8, camera.position.y + 0.2]
   for (const sampleHeight of sampleHeights) {
     parkingWallRaycaster.set(new THREE.Vector3(camera.position.x, sampleHeight, camera.position.z), horizontalStep)
+    parkingWallRaycaster.far = distance + 0.42
     const hit = parkingWallRaycaster.intersectObject(parkingLotRoot, true)[0]
     if (hit && hit.distance <= distance + 0.18) return true
   }
@@ -3775,6 +3902,7 @@ function createImpactSpark(position: THREE.Vector3, normal: THREE.Vector3, incom
 }
 
 function fireShot(): void {
+  if (trueCarEntered) return
   playGunshot()
   applyRecoil()
   shotOrigin.copy(getMuzzleWorldPosition())
@@ -3839,7 +3967,7 @@ function render(): void {
   }
 
   movement.set(0, 0, 0)
-  if (controls.isLocked && !trueCarEntered) {
+  if (controls.isLocked && !trueCarEntered && !startScreen.classList.contains('is-visible')) {
     direction.set(Number(keys.has('KeyD')) - Number(keys.has('KeyA')), 0, Number(keys.has('KeyW')) - Number(keys.has('KeyS')))
     if (direction.lengthSq() > 0) {
       direction.normalize()
@@ -3859,6 +3987,16 @@ function render(): void {
   }
   if (trueCarEntered) updateTrueCarSeatPosition()
   else resolveParkingCollision()
+  if (trueCarEntered && trueCar && Number.isFinite(carEndingShakeStartedAt)) {
+    const shakeElapsed = performance.now() / 1000 - carEndingShakeStartedAt
+    const shake = carEndingShakePeaks.reduce((amount, peak) => {
+      const peakElapsed = shakeElapsed - peak
+      return amount + Math.exp(-((peakElapsed / 0.16) ** 2))
+    }, 0)
+    trueCar.position.copy(carEndingBasePosition).add(new THREE.Vector3(Math.sin(shakeElapsed * 42) * shake * 0.28, Math.abs(Math.sin(shakeElapsed * 36)) * shake * 0.12, 0))
+    carEndingShakeQuaternion.setFromAxisAngle(carEndingShakeAxis, Math.sin(shakeElapsed * 48) * shake * 0.12)
+    trueCar.quaternion.copy(carEndingBaseQuaternion).multiply(carEndingShakeQuaternion)
+  }
   updateInfiniteFloor()
   updateKeyInteractionPrompt()
   updateTrueCarSoundIndicator()
