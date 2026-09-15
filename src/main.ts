@@ -1,6 +1,7 @@
 import './style.css'
 import * as THREE from 'three'
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gsap } from 'gsap'
 import RAPIER from '@dimforge/rapier3d-compat'
@@ -25,6 +26,11 @@ app.innerHTML = `
       <canvas id="range-canvas" aria-label="Escape game view"></canvas>
       <div class="crosshair" aria-hidden="true"><span></span><i></i><b></b><em></em></div>
       <div class="hit-marker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="fear-overlay" aria-hidden="true"></div>
+      <div class="death-overlay" aria-hidden="true"></div>
+      <section class="death-screen" aria-label="You died">
+        <div class="death-actions"><button class="death-action-button" id="death-retry-button" type="button">RETRY</button><button class="death-action-button" id="death-exit-button" type="button">EXIT</button></div>
+      </section>
       <div class="episode-fade-overlay" aria-hidden="true"></div>
       <button class="settings-button" type="button" aria-label="Open settings" title="Open settings">⚙</button>
       <button class="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button>
@@ -64,6 +70,11 @@ app.innerHTML = `
 const canvas = document.querySelector<HTMLCanvasElement>('#range-canvas')!
 const crosshair = document.querySelector<HTMLElement>('.crosshair')!
 const hitMarker = document.querySelector<HTMLElement>('.hit-marker')!
+const fearOverlay = document.querySelector<HTMLElement>('.fear-overlay')!
+const deathOverlay = document.querySelector<HTMLElement>('.death-overlay')!
+const deathScreen = document.querySelector<HTMLElement>('.death-screen')!
+const deathRetryButton = document.querySelector<HTMLButtonElement>('#death-retry-button')!
+const deathExitButton = document.querySelector<HTMLButtonElement>('#death-exit-button')!
 const range = document.querySelector<HTMLElement>('.range')!
 const keyPickupPrompt = document.createElement('div')
 keyPickupPrompt.className = 'interaction-prompt'
@@ -308,11 +319,63 @@ const trueCarEspToggleLabel = document.createElement('label')
 trueCarEspToggleLabel.className = 'toggle-row'
 trueCarEspToggleLabel.textContent = 'TRUE CAR ESP OUTLINE '
 trueCarEspToggleLabel.append(trueCarEspSetting)
+const carHitboxSetting = document.createElement('input')
+carHitboxSetting.id = 'car-hitbox-setting'
+carHitboxSetting.type = 'checkbox'
+carHitboxSetting.checked = false
+const carHitboxToggleLabel = document.createElement('label')
+carHitboxToggleLabel.className = 'toggle-row'
+carHitboxToggleLabel.textContent = 'CAR HITBOXES '
+carHitboxToggleLabel.append(carHitboxSetting)
+const matryoshkaHitboxSetting = document.createElement('input')
+matryoshkaHitboxSetting.id = 'matryoshka-hitbox-setting'
+matryoshkaHitboxSetting.type = 'checkbox'
+matryoshkaHitboxSetting.checked = false
+const matryoshkaHitboxToggleLabel = document.createElement('label')
+matryoshkaHitboxToggleLabel.className = 'toggle-row'
+matryoshkaHitboxToggleLabel.textContent = 'MATRYOSHKA HITBOX '
+matryoshkaHitboxToggleLabel.append(matryoshkaHitboxSetting)
+const matryoshkaVisionSetting = document.createElement('input')
+matryoshkaVisionSetting.id = 'matryoshka-vision-setting'
+matryoshkaVisionSetting.type = 'checkbox'
+matryoshkaVisionSetting.checked = false
+const matryoshkaVisionToggleLabel = document.createElement('label')
+matryoshkaVisionToggleLabel.className = 'toggle-row'
+matryoshkaVisionToggleLabel.textContent = 'MATRYOSHKA VISION RANGE '
+matryoshkaVisionToggleLabel.append(matryoshkaVisionSetting)
+const waypointDisplaySetting = document.createElement('input')
+waypointDisplaySetting.id = 'matryoshka-waypoint-display-setting'
+waypointDisplaySetting.type = 'checkbox'
+waypointDisplaySetting.checked = false
+const waypointDisplayToggleLabel = document.createElement('label')
+waypointDisplayToggleLabel.className = 'toggle-row'
+waypointDisplayToggleLabel.textContent = 'SHOW MATRYOSHKA WAYPOINTS '
+waypointDisplayToggleLabel.append(waypointDisplaySetting)
+const waypointEditSetting = document.createElement('input')
+waypointEditSetting.id = 'matryoshka-waypoint-edit-setting'
+waypointEditSetting.type = 'checkbox'
+waypointEditSetting.checked = false
+const waypointEditToggleLabel = document.createElement('label')
+waypointEditToggleLabel.className = 'toggle-row'
+waypointEditToggleLabel.textContent = 'PLACE WAYPOINTS WITH CLICK '
+waypointEditToggleLabel.append(waypointEditSetting)
 const developerTestGroup = document.createElement('div')
 developerTestGroup.className = 'developer-test-group'
 developerTestGroup.innerHTML = '<h2>DEVELOPER TEST OPTIONS</h2>'
-developerTestGroup.append(hideAllCarsToggleLabel, keyEspToggleLabel, trueCarEspToggleLabel)
-displayCategoryPanel?.append(developerTestGroup)
+developerTestGroup.append(hideAllCarsToggleLabel, keyEspToggleLabel, trueCarEspToggleLabel, carHitboxToggleLabel, matryoshkaHitboxToggleLabel, matryoshkaVisionToggleLabel, waypointDisplayToggleLabel, waypointEditToggleLabel)
+const developerCategoryButton = document.createElement('button')
+developerCategoryButton.className = 'settings-category'
+developerCategoryButton.dataset.category = 'developer'
+developerCategoryButton.type = 'button'
+developerCategoryButton.textContent = 'DEVELOPER TEST'
+const developerCategoryPanel = document.createElement('section')
+developerCategoryPanel.className = 'settings-group settings-panel-group'
+developerCategoryPanel.dataset.categoryPanel = 'developer'
+developerCategoryPanel.append(developerTestGroup)
+settingsCategoryNav?.append(developerCategoryButton)
+settingsCategoryContent?.append(developerCategoryPanel)
+settingsCategoryButtons.push(developerCategoryButton)
+settingsCategoryPanels.push(developerCategoryPanel)
 const crosshairOutlineColorSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-color-setting')!
 const crosshairOutlineThicknessSetting = document.querySelector<HTMLInputElement>('#crosshair-outline-thickness-setting')!
 const crosshairOutlineThicknessValue = document.querySelector<HTMLOutputElement>('#crosshair-outline-thickness-value')!
@@ -418,6 +481,9 @@ let storeRoot: THREE.Object3D | null = null
 let storeBounds: THREE.Box3 | null = null
 let isInStore = false
 const parkingObstacles: THREE.Box3[] = []
+const matryoshkaObstacles: THREE.Box3[] = []
+const matryoshkaVehicleObstacles: THREE.Box3[] = []
+const carHitboxHelpers: THREE.Box3Helper[] = []
 const parkingObstacleCellSize = 8
 const parkingObstacleCells = new Map<string, THREE.Box3[]>()
 const keyEspObjects: THREE.Object3D[] = []
@@ -428,9 +494,528 @@ let keyPickupCollected = false
 let trueCar: THREE.Object3D | null = null
 let trueCarEntered = false
 let trueCarSoundPlaying = false
+type MatryoshkaMobState = 'wander' | 'investigate' | 'chase'
+type MatryoshkaMob = {
+  object: THREE.Object3D
+  state: MatryoshkaMobState
+  target: THREE.Vector3
+  velocity: THREE.Vector3
+  pathRefreshAt: number
+  route: THREE.Vector3[]
+  visionIndicator: THREE.LineLoop
+  hitboxHelper: THREE.Box3Helper
+  heardSoundVersion: number
+}
+const matryoshkaMobs: MatryoshkaMob[] = []
+const matryoshkaWaypoints: THREE.Vector3[] = []
+const matryoshkaRecoveryWaypoints: THREE.Vector3[] = []
+const matryoshkaUserWaypoints: THREE.Vector3[] = []
+const matryoshkaWaypointMarkers: THREE.Mesh[] = []
+const matryoshkaRecoveryWaypointMarkers: THREE.Mesh[] = []
+const matryoshkaPatrolWaypoints = [
+  new THREE.Vector3(5.089, 0.015, -73.135),
+  new THREE.Vector3(45.068, 3.304, -85.551),
+  new THREE.Vector3(-37.101, 0.015, -72.049),
+  new THREE.Vector3(-61.427, 0.015, -70.267),
+  new THREE.Vector3(-69.494, 0.015, -17.804),
+  new THREE.Vector3(-68.625, 0.015, 67.872),
+  new THREE.Vector3(-36.869, 0.015, 67.121),
+  new THREE.Vector3(3.986, 0.015, 69.305),
+]
+const matryoshkaDetectionRange = 34
+const matryoshkaSpeed = 7.65
+const matryoshkaChaseSpeed = 7.65
+const matryoshkaPathRefreshInterval = 0.6
+const matryoshkaEyeHeight = 2.5
+const matryoshkaModelYawOffset = -Math.PI / 2
+const matryoshkaMinWanderDistance = 35
+const matryoshkaObstaclePadding = 0.3
+const playerWalkSpeed = 3.8
+const playerRunSpeed = 11.5
+let matryoshkaVehicleHeight = 6
+const matryoshkaMobPosition = new THREE.Vector3()
+const matryoshkaPlayerPosition = new THREE.Vector3()
+const matryoshkaToPlayer = new THREE.Vector3()
+const matryoshkaMoveDirection = new THREE.Vector3()
+const matryoshkaRaycaster = new THREE.Raycaster()
+const matryoshkaSoundTarget = new THREE.Vector3()
+let matryoshkaSoundVersion = 0
+let lastFootstepSoundAt = -Infinity
+let playerDeathActive = false
+let playerDeathElapsed = 0
+let playerDeathStartPosition = new THREE.Vector3()
+let playerDeathStartQuaternion = new THREE.Quaternion()
+const playerDeathRotation = new THREE.Quaternion()
+const playerDeathAxis = new THREE.Vector3(0, 0, 1)
 
-function addParkingObstacle(bounds: THREE.Box3): void {
+function triggerPlayerDeath(): void {
+  if (playerDeathActive) return
+  playerDeathActive = true
+  playerDeathElapsed = 0
+  playerDeathStartPosition.copy(camera.position)
+  playerDeathStartQuaternion.copy(camera.quaternion)
+  deathOverlay.classList.add('is-visible')
+  deathScreen.classList.add('is-visible')
+  fearOverlay.classList.remove('is-visible')
+  controls.unlock()
+  keys.clear()
+  matryoshkaMobs.forEach((mob) => { mob.velocity.set(0, 0, 0); mob.route = [] })
+}
+
+function exitApplication(): void {
+  if (window.electronAPI) {
+    window.electronAPI.quit()
+    return
+  }
+  window.close()
+}
+
+deathRetryButton.addEventListener('click', () => window.location.reload())
+deathExitButton.addEventListener('click', exitApplication)
+
+function getMatryoshkaGroundHit(x: number, z: number): THREE.Intersection | undefined {
+  if (!parkingBounds || !parkingLotRoot) return undefined
+  parkingGroundRaycaster.set(new THREE.Vector3(x, parkingBounds.max.y + 10, z), new THREE.Vector3(0, -1, 0))
+  return parkingGroundRaycaster.intersectObject(parkingLotRoot, true).find((intersection) => {
+    if (intersection.point.y < parkingBounds!.min.y - 0.25 || intersection.point.y > parkingBounds!.min.y + matryoshkaVehicleHeight) return false
+    return Boolean(intersection.face && intersection.face.normal.clone().transformDirection(intersection.object.matrixWorld).y > 0.2)
+  })
+}
+
+function isMatryoshkaWaypointValid(x: number, z: number): boolean {
+  if (!parkingBounds || !parkingLotRoot || overlapsMatryoshkaVehicleObstacle(x, z, matryoshkaObstaclePadding)) return false
+  const hit = getMatryoshkaGroundHit(x, z)
+  return Boolean(hit?.face && hit.face.normal.clone().transformDirection(hit.object.matrixWorld).y > 0.2)
+}
+
+function rebuildMatryoshkaWaypoints(): void {
+  if (!parkingBounds) return
+  matryoshkaWaypoints.length = 0
+  matryoshkaWaypoints.push(...matryoshkaPatrolWaypoints.map((waypoint) => waypoint.clone()))
+  matryoshkaRecoveryWaypoints.length = 0
+  const recoverySpacing = 3.5
+  for (let x = parkingBounds.min.x + 2; x <= parkingBounds.max.x - 2; x += recoverySpacing) {
+    for (let z = parkingBounds.min.z + 2; z <= parkingBounds.max.z - 2; z += recoverySpacing) {
+      if (!isMatryoshkaWaypointValid(x, z)) continue
+      const hit = getMatryoshkaGroundHit(x, z)
+      if (hit) matryoshkaRecoveryWaypoints.push(new THREE.Vector3(x, hit.point.y, z))
+    }
+  }
+  syncMatryoshkaWaypointMarkers()
+}
+
+function syncMatryoshkaWaypointMarkers(): void {
+  matryoshkaWaypointMarkers.forEach((marker) => scene.remove(marker))
+  matryoshkaWaypointMarkers.length = 0
+  matryoshkaRecoveryWaypointMarkers.forEach((marker) => scene.remove(marker))
+  matryoshkaRecoveryWaypointMarkers.length = 0
+  const markerMaterial = new THREE.MeshBasicMaterial({ color: '#ffcf52', transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false })
+  const recoveryMarkerMaterial = new THREE.MeshBasicMaterial({ color: '#45c7ff', transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false })
+  matryoshkaWaypoints.forEach((waypoint) => {
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), markerMaterial)
+    marker.position.copy(waypoint)
+    marker.position.y += 0.3
+    marker.renderOrder = 1004
+    marker.visible = waypointDisplaySetting.checked
+    scene.add(marker)
+    matryoshkaWaypointMarkers.push(marker)
+  })
+  matryoshkaRecoveryWaypoints.forEach((waypoint) => {
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 4), recoveryMarkerMaterial)
+    marker.position.copy(waypoint)
+    marker.position.y += 0.18
+    marker.renderOrder = 1003
+    marker.visible = waypointDisplaySetting.checked
+    scene.add(marker)
+    matryoshkaRecoveryWaypointMarkers.push(marker)
+  })
+}
+
+function addMatryoshkaRowCorridorWaypoints(firstRowX: number, reversedRowX: number, startZ: number, endZ: number): void {
+  const corridorX = (firstRowX + reversedRowX) * 0.5
+  const corridorOffsets = [0, -0.9, 0.9, -1.8, 1.8]
+  const corridorStep = 2.5
+  for (let z = Math.min(startZ, endZ); z <= Math.max(startZ, endZ); z += corridorStep) {
+    let placed = false
+    for (const offset of corridorOffsets) {
+      const x = corridorX + offset
+      if (!isMatryoshkaWaypointValid(x, z)) continue
+      const hit = getMatryoshkaGroundHit(x, z)
+      if (!hit) continue
+      const waypoint = new THREE.Vector3(x, hit.point.y, z)
+      if (!matryoshkaWaypoints.some((existing) => existing.distanceToSquared(waypoint) < 1)) matryoshkaWaypoints.push(waypoint)
+      placed = true
+      break
+    }
+    if (!placed) console.warn(`Matryoshka corridor waypoint skipped at z=${z.toFixed(1)}`)
+  }
+}
+
+function logMatryoshkaUserWaypoints(): void {
+  const coordinates = matryoshkaUserWaypoints.map((waypoint, index) => ({
+    index,
+    x: Number(waypoint.x.toFixed(3)),
+    y: Number(waypoint.y.toFixed(3)),
+    z: Number(waypoint.z.toFixed(3)),
+  }))
+  console.log('[Matryoshka waypoints] Copy this JSON:', JSON.stringify(coordinates, null, 2))
+  console.table(coordinates)
+}
+
+function getMatryoshkaFreeRoamTarget(origin: THREE.Vector3): THREE.Vector3 | null {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (!parkingBounds || !parkingLotRoot) return null
+    const x = THREE.MathUtils.randFloat(parkingBounds.min.x + 1.5, parkingBounds.max.x - 1.5)
+    const z = THREE.MathUtils.randFloat(parkingBounds.min.z + 1.5, parkingBounds.max.z - 1.5)
+    if (overlapsMatryoshkaVehicleObstacle(x, z, matryoshkaObstaclePadding)) continue
+    const hit = getMatryoshkaGroundHit(x, z)
+    const candidate = hit ? new THREE.Vector3(x, hit.point.y + 0.02, z) : null
+    if (candidate && candidate.distanceTo(origin) >= matryoshkaMinWanderDistance) return candidate
+  }
+  return null
+}
+
+function addMatryoshkaWaypointFromAim(): void {
+  if (!parkingLotRoot || !parkingBounds) return
+  camera.updateMatrixWorld(true)
+  camera.getWorldDirection(matryoshkaMoveDirection)
+  parkingGroundRaycaster.set(camera.position, matryoshkaMoveDirection)
+  parkingGroundRaycaster.far = 180
+  const hit = parkingGroundRaycaster.intersectObject(parkingLotRoot, true).find((intersection) => intersection.point.y >= parkingBounds!.min.y - 0.25)
+  if (!hit || !hit.face) return
+  const floorNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
+  if (floorNormal.y <= 0.2) return
+  const waypoint = new THREE.Vector3(hit.point.x, hit.point.y, hit.point.z)
+  if (matryoshkaUserWaypoints.some((existing) => existing.distanceToSquared(waypoint) < 0.25)) return
+  matryoshkaUserWaypoints.push(waypoint)
+  syncMatryoshkaWaypointMarkers()
+  logMatryoshkaUserWaypoints()
+  matryoshkaMobs.forEach((mob) => { mob.pathRefreshAt = 0 })
+}
+
+function alertMatryoshkasToSound(position: THREE.Vector3): void {
+  matryoshkaSoundTarget.copy(position)
+  matryoshkaSoundVersion += 1
+  matryoshkaMobs.forEach((mob) => {
+    if (mob.state === 'chase') return
+    mob.state = 'investigate'
+    mob.heardSoundVersion = 0
+    mob.route = []
+    mob.pathRefreshAt = 0
+  })
+}
+
+function isMatryoshkaPathClear(start: THREE.Vector3, end: THREE.Vector3, padding = matryoshkaObstaclePadding): boolean {
+  const minX = Math.min(start.x, end.x) - padding
+  const maxX = Math.max(start.x, end.x) + padding
+  const minZ = Math.min(start.z, end.z) - padding
+  const maxZ = Math.max(start.z, end.z) + padding
+  const directionX = end.x - start.x
+  const directionZ = end.z - start.z
+  for (const obstacle of matryoshkaVehicleObstacles) {
+    if (obstacle.max.x < minX || obstacle.min.x > maxX || obstacle.max.z < minZ || obstacle.min.z > maxZ) continue
+    const expandedMinX = obstacle.min.x - padding
+    const expandedMaxX = obstacle.max.x + padding
+    const expandedMinZ = obstacle.min.z - padding
+    const expandedMaxZ = obstacle.max.z + padding
+    const tx1 = directionX === 0 ? (start.x >= expandedMinX && start.x <= expandedMaxX ? -Infinity : Infinity) : (expandedMinX - start.x) / directionX
+    const tx2 = directionX === 0 ? (start.x >= expandedMinX && start.x <= expandedMaxX ? Infinity : -Infinity) : (expandedMaxX - start.x) / directionX
+    const tz1 = directionZ === 0 ? (start.z >= expandedMinZ && start.z <= expandedMaxZ ? -Infinity : Infinity) : (expandedMinZ - start.z) / directionZ
+    const tz2 = directionZ === 0 ? (start.z >= expandedMinZ && start.z <= expandedMaxZ ? Infinity : -Infinity) : (expandedMaxZ - start.z) / directionZ
+    if (Math.max(Math.min(tx1, tx2), Math.min(tz1, tz2), 0) <= Math.min(Math.max(tx1, tx2), Math.max(tz1, tz2), 1)) return false
+  }
+  return true
+}
+
+function findNearestMatryoshkaWaypoint(position: THREE.Vector3, waypoints = matryoshkaWaypoints): THREE.Vector3 | null {
+  let nearest: THREE.Vector3 | null = null
+  let nearestDistance = Infinity
+  for (const waypoint of waypoints) {
+    const distance = waypoint.distanceToSquared(position)
+    if (distance < nearestDistance && isMatryoshkaPathClear(position, waypoint)) {
+      nearest = waypoint
+      nearestDistance = distance
+    }
+  }
+  return nearest
+}
+
+function findMatryoshkaRoute(start: THREE.Vector3, end: THREE.Vector3, waypoints = matryoshkaWaypoints): THREE.Vector3[] {
+  const startWaypoint = findNearestMatryoshkaWaypoint(start, waypoints)
+  const endWaypoint = findNearestMatryoshkaWaypoint(end, waypoints)
+  if (!startWaypoint || !endWaypoint) return []
+  if (isMatryoshkaPathClear(start, end)) return [end.clone()]
+
+  const distances = new Map<THREE.Vector3, number>(waypoints.map((waypoint) => [waypoint, Infinity]))
+  const previous = new Map<THREE.Vector3, THREE.Vector3>()
+  const open = [startWaypoint]
+  distances.set(startWaypoint, 0)
+  while (open.length > 0) {
+    open.sort((a, b) => (distances.get(a) ?? Infinity) - (distances.get(b) ?? Infinity))
+    const current = open.shift()!
+    if (current === endWaypoint) break
+    for (const neighbor of waypoints) {
+      if (neighbor === current || current.distanceToSquared(neighbor) > 36 || !isMatryoshkaPathClear(current, neighbor)) continue
+      const nextDistance = (distances.get(current) ?? Infinity) + current.distanceTo(neighbor)
+      if (nextDistance >= (distances.get(neighbor) ?? Infinity)) continue
+      distances.set(neighbor, nextDistance)
+      previous.set(neighbor, current)
+      if (!open.includes(neighbor)) open.push(neighbor)
+    }
+  }
+  if (!previous.has(endWaypoint) && endWaypoint !== startWaypoint) return []
+  const route: THREE.Vector3[] = [end.clone()]
+  let current: THREE.Vector3 | undefined = endWaypoint
+  while (current && current !== startWaypoint) {
+    route.unshift(current.clone())
+    current = previous.get(current)
+  }
+  return route
+}
+
+function findMatryoshkaRecoveryRoute(start: THREE.Vector3): THREE.Vector3[] {
+  const destination = findNearestMatryoshkaWaypoint(start)
+  if (!destination) return []
+  const recoveryGraph = [...matryoshkaRecoveryWaypoints, ...matryoshkaWaypoints]
+  return findMatryoshkaRoute(start, destination, recoveryGraph)
+}
+
+function getMatryoshkaSpawnPosition(): THREE.Vector3 | null {
+  const randomSpawn = getRandomKeySpawnPosition()
+  if (randomSpawn) return randomSpawn
+  if (!parkingBounds || !parkingLotRoot) return null
+
+  const bounds = parkingBounds
+  for (let x = bounds.min.x + 3; x <= bounds.max.x - 3; x += 3) {
+    for (let z = bounds.min.z + 3; z <= bounds.max.z - 3; z += 3) {
+      if (!isMatryoshkaWaypointValid(x, z)) continue
+      const hit = getMatryoshkaGroundHit(x, z)
+      if (hit) return new THREE.Vector3(x, hit.point.y + 0.02, z)
+    }
+  }
+  return null
+}
+
+function getMatryoshkaRampSpawnPosition(): THREE.Vector3 | null {
+  if (!parkingBounds || !parkingLotRoot) return null
+  const bounds = parkingBounds
+  let bestPosition: THREE.Vector3 | null = null
+  let bestSlope = 0
+  const sample = new THREE.Vector3()
+  const neighbor = new THREE.Vector3()
+  const sampleGround = (x: number, z: number): THREE.Vector3 | null => {
+    if (!isMatryoshkaWaypointValid(x, z)) return null
+    const hit = getMatryoshkaGroundHit(x, z)
+    return hit ? new THREE.Vector3(x, hit.point.y, z) : null
+  }
+
+  for (let x = bounds.min.x + 4; x <= bounds.max.x - 4; x += 3) {
+    for (let z = bounds.min.z + 4; z <= bounds.max.z - 4; z += 3) {
+      const center = sampleGround(x, z)
+      if (!center) continue
+      let slope = 0
+      for (const [offsetX, offsetZ] of [[3, 0], [-3, 0], [0, 3], [0, -3]]) {
+        neighbor.copy(center)
+        neighbor.x += offsetX
+        neighbor.z += offsetZ
+        sample.copy(neighbor)
+        const neighborGround = sampleGround(sample.x, sample.z)
+        if (neighborGround) slope = Math.max(slope, Math.abs(center.y - neighborGround.y))
+      }
+      if (slope > bestSlope) {
+        bestSlope = slope
+        bestPosition = center
+      }
+    }
+  }
+  return bestPosition ? bestPosition.add(new THREE.Vector3(0, 0.02, 0)) : null
+}
+
+function matryoshkaHasLineOfSight(mob: THREE.Object3D, player: THREE.Vector3): boolean {
+  mob.getWorldPosition(matryoshkaMobPosition)
+  const mobGroundPosition = matryoshkaMobPosition.clone()
+  matryoshkaMobPosition.y += matryoshkaEyeHeight
+  matryoshkaPlayerPosition.copy(player)
+  matryoshkaPlayerPosition.y += 1.2
+  matryoshkaToPlayer.subVectors(matryoshkaPlayerPosition, matryoshkaMobPosition)
+  const distance = matryoshkaToPlayer.length()
+  if (distance <= 0.01) return true
+  matryoshkaRaycaster.set(matryoshkaMobPosition, matryoshkaToPlayer.normalize())
+  matryoshkaRaycaster.far = distance
+  if (parkingLotRoot && matryoshkaRaycaster.intersectObject(parkingLotRoot, true).length > 0) return false
+  return isMatryoshkaPathClear(mobGroundPosition, player, matryoshkaObstaclePadding)
+}
+
+function chooseMatryoshkaTarget(mob: MatryoshkaMob): void {
+  mob.object.getWorldPosition(matryoshkaMobPosition)
+  if (mob.state === 'chase' && matryoshkaHasLineOfSight(mob.object, camera.position)) {
+    mob.route = [camera.position.clone()]
+    mob.target.copy(camera.position)
+    return
+  }
+  if (mob.state === 'chase') {
+    mob.route = findMatryoshkaRoute(matryoshkaMobPosition, camera.position)
+    const nextWaypoint = mob.route[0]
+    if (nextWaypoint) mob.target.copy(nextWaypoint)
+    return
+  }
+  if (mob.state === 'investigate') {
+    mob.route = findMatryoshkaRoute(matryoshkaMobPosition, matryoshkaSoundTarget)
+    if (mob.route.length === 0) mob.route = [matryoshkaSoundTarget.clone()]
+    mob.target.copy(mob.route[0])
+    mob.heardSoundVersion = matryoshkaSoundVersion
+    return
+  }
+  if (matryoshkaWaypoints.length === 0) return
+  const candidates: THREE.Vector3[] = []
+  for (let attempt = 0; attempt < 18; attempt += 1) {
+    const candidate = getMatryoshkaFreeRoamTarget(matryoshkaMobPosition)
+    if (candidate) candidates.push(candidate)
+  }
+  let bestRoute: THREE.Vector3[] = []
+  let bestDistance = 0
+  for (const candidate of candidates) {
+    const route = findMatryoshkaRoute(matryoshkaMobPosition, candidate)
+    const routeDistance = route.reduce((distance, point, index) => distance + (index === 0 ? matryoshkaMobPosition.distanceTo(point) : route[index - 1].distanceTo(point)), 0)
+    if (routeDistance > bestDistance) {
+      bestDistance = routeDistance
+      bestRoute = route
+    }
+  }
+  if (bestRoute.length === 0) {
+    const fallback = matryoshkaWaypoints.reduce((farthest, waypoint) => waypoint.distanceToSquared(matryoshkaMobPosition) > farthest.distanceToSquared(matryoshkaMobPosition) ? waypoint : farthest)
+    bestRoute = [fallback.clone()]
+  }
+  mob.route = bestRoute
+  mob.target.copy(bestRoute[0])
+}
+
+function updateMatryoshkaMobs(now: number, delta: number): void {
+  if (!parkingLotRoot || matryoshkaWaypoints.length === 0) return
+  if (settingsOverlay.classList.contains('is-open')) {
+    matryoshkaMobs.forEach((mob) => { mob.velocity.set(0, 0, 0) })
+    return
+  }
+  if (playerDeathActive) return
+  let fearActive = false
+  for (const mob of matryoshkaMobs) {
+    mob.object.getWorldPosition(matryoshkaMobPosition)
+    const fullMobBounds = new THREE.Box3().setFromObject(mob.object)
+    const mobBoundsCenter = fullMobBounds.getCenter(new THREE.Vector3())
+    const mobBoundsSize = fullMobBounds.getSize(new THREE.Vector3()).multiplyScalar(0.7)
+    mob.hitboxHelper.box.setFromCenterAndSize(mobBoundsCenter, mobBoundsSize)
+    mob.hitboxHelper.visible = matryoshkaHitboxSetting.checked
+    mob.visionIndicator.position.set(matryoshkaMobPosition.x, matryoshkaMobPosition.y + 0.05, matryoshkaMobPosition.z)
+    if (mob.state === 'investigate' || mob.state === 'chase') fearActive = true
+    if (Math.hypot(matryoshkaMobPosition.x - camera.position.x, matryoshkaMobPosition.z - camera.position.z) <= 1.35) {
+      triggerPlayerDeath()
+      return
+    }
+    const distanceToPlayer = matryoshkaMobPosition.distanceTo(camera.position)
+    const playerVisible = distanceToPlayer <= matryoshkaDetectionRange && matryoshkaHasLineOfSight(mob.object, camera.position)
+    const reachedSound = mob.state === 'investigate' && mob.heardSoundVersion === matryoshkaSoundVersion && mob.target.distanceToSquared(matryoshkaMobPosition) < 4 && mob.route.length <= 1
+    // Visual contact always outranks an older gunshot or footstep target.
+    const nextState: MatryoshkaMobState = playerVisible
+      ? 'chase'
+      : reachedSound
+        ? 'wander'
+        : mob.state === 'investigate'
+          ? 'investigate'
+          : 'wander'
+    const previousState = mob.state
+    if (nextState !== mob.state) {
+      mob.state = nextState
+      mob.route = nextState === 'wander' && previousState !== 'wander' ? findMatryoshkaRecoveryRoute(matryoshkaMobPosition) : []
+      if (mob.route.length > 0) mob.target.copy(mob.route[0])
+      mob.pathRefreshAt = 0
+    }
+    if (mob.target.distanceToSquared(matryoshkaMobPosition) < 4 && mob.route.length > 1) {
+      mob.route.shift()
+      mob.target.copy(mob.route[0])
+      mob.pathRefreshAt = now + matryoshkaPathRefreshInterval
+    } else if (now >= mob.pathRefreshAt || mob.target.distanceToSquared(matryoshkaMobPosition) < 2 || (mob.state === 'investigate' && mob.heardSoundVersion !== matryoshkaSoundVersion)) {
+      chooseMatryoshkaTarget(mob)
+      mob.pathRefreshAt = now + matryoshkaPathRefreshInterval
+    }
+    matryoshkaMoveDirection.subVectors(mob.target, matryoshkaMobPosition)
+    matryoshkaMoveDirection.y = 0
+    if (matryoshkaMoveDirection.lengthSq() < 0.01) continue
+    matryoshkaMoveDirection.normalize()
+    const speed = mob.state === 'chase' ? matryoshkaChaseSpeed : matryoshkaSpeed
+    mob.velocity.lerp(matryoshkaMoveDirection.multiplyScalar(speed), 1 - Math.exp(-8 * delta))
+    moveMatryoshkaWithVehicleSlide(mob, delta)
+    mob.object.rotation.y = Math.atan2(mob.velocity.x, mob.velocity.z) + matryoshkaModelYawOffset
+  }
+  fearOverlay.classList.toggle('is-visible', fearActive)
+}
+
+function spawnMatryoshkaMob(): void {
+  if (!parkingBounds || !parkingLotRoot) return
+  const currentParkingBounds = parkingBounds
+  const loader = new GLTFLoader()
+  const url = new URL('./assets/matryoshka-doll/matryoshka_doll.glb', import.meta.url).href
+  loader.load(url, (gltf) => {
+    const mobObject = gltf.scene
+    mobObject.updateMatrixWorld(true)
+    const bounds = new THREE.Box3().setFromObject(mobObject)
+    const size = bounds.getSize(new THREE.Vector3())
+    mobObject.scale.setScalar(5 / Math.max(size.y, 0.01))
+    mobObject.updateMatrixWorld(true)
+    const scaledBounds = new THREE.Box3().setFromObject(mobObject)
+    mobObject.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.visible = true
+        child.castShadow = false
+        child.receiveShadow = false
+        const materials = Array.isArray(child.material) ? child.material : [child.material]
+        materials.forEach((material) => {
+          material.side = THREE.DoubleSide
+          material.depthWrite = true
+          material.transparent = false
+          material.opacity = 1
+          material.needsUpdate = true
+        })
+      }
+    })
+    const fallbackSpawn = currentParkingBounds.getCenter(new THREE.Vector3())
+    fallbackSpawn.y = currentParkingBounds.min.y + 0.02
+    const spawn = getMatryoshkaRampSpawnPosition() ?? getMatryoshkaSpawnPosition() ?? matryoshkaWaypoints[0]?.clone() ?? fallbackSpawn
+    mobObject.position.set(spawn.x, spawn.y - scaledBounds.min.y, spawn.z)
+    const matryoshkaHitbox = new THREE.Box3().setFromObject(mobObject)
+    const matryoshkaHitboxHelper = new THREE.Box3Helper(matryoshkaHitbox, '#ff00ff')
+    matryoshkaHitboxHelper.visible = matryoshkaHitboxSetting.checked
+    matryoshkaHitboxHelper.renderOrder = 1006
+    const visionPoints = Array.from({ length: 160 }, (_, index) => {
+      const angle = (index / 160) * Math.PI * 2
+      return new THREE.Vector3(Math.cos(angle) * matryoshkaDetectionRange, 0, Math.sin(angle) * matryoshkaDetectionRange)
+    })
+    const visionIndicator = new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(visionPoints),
+      new THREE.LineBasicMaterial({ color: '#ff2020', transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false, toneMapped: false }),
+    )
+    visionIndicator.renderOrder = 1005
+    visionIndicator.frustumCulled = false
+    visionIndicator.visible = matryoshkaVisionSetting.checked
+    scene.add(mobObject, visionIndicator, matryoshkaHitboxHelper)
+    const mob: MatryoshkaMob = {
+      object: mobObject,
+      state: 'wander',
+      target: new THREE.Vector3(),
+      velocity: new THREE.Vector3(),
+      pathRefreshAt: 0,
+      route: [],
+      visionIndicator,
+      hitboxHelper: matryoshkaHitboxHelper,
+      heardSoundVersion: 0,
+    }
+    matryoshkaMobs.push(mob)
+    chooseMatryoshkaTarget(mob)
+  }, undefined, (error) => console.error('Failed to load Matryoshka mob.', error))
+}
+
+function addParkingObstacle(bounds: THREE.Box3, affectsMatryoshka = true): void {
   parkingObstacles.push(bounds)
+  if (affectsMatryoshka) matryoshkaObstacles.push(bounds)
 
   const minCellX = Math.floor(bounds.min.x / parkingObstacleCellSize)
   const maxCellX = Math.floor(bounds.max.x / parkingObstacleCellSize)
@@ -480,6 +1065,46 @@ function overlapsParkingObstacle(x: number, z: number, padding = 0.45): boolean 
   return false
 }
 
+function overlapsMatryoshkaObstacle(x: number, z: number, padding = matryoshkaObstaclePadding): boolean {
+  for (const obstacle of matryoshkaObstacles) {
+    const overlapsX = x > obstacle.min.x - padding && x < obstacle.max.x + padding
+    const overlapsZ = z > obstacle.min.z - padding && z < obstacle.max.z + padding
+    if (overlapsX && overlapsZ) return true
+  }
+  return false
+}
+
+function overlapsMatryoshkaVehicleObstacle(x: number, z: number, padding = matryoshkaObstaclePadding): boolean {
+  for (const obstacle of matryoshkaVehicleObstacles) {
+    const overlapsX = x > obstacle.min.x - padding && x < obstacle.max.x + padding
+    const overlapsZ = z > obstacle.min.z - padding && z < obstacle.max.z + padding
+    if (overlapsX && overlapsZ) return true
+  }
+  return false
+}
+
+function moveMatryoshkaWithVehicleSlide(mob: MatryoshkaMob, delta: number): void {
+  const stepX = mob.velocity.x * delta
+  const stepZ = mob.velocity.z * delta
+  const currentX = mob.object.position.x
+  const currentZ = mob.object.position.z
+  const canMoveFull = !overlapsMatryoshkaVehicleObstacle(currentX + stepX, currentZ + stepZ, matryoshkaObstaclePadding)
+  if (canMoveFull) {
+    mob.object.position.x += stepX
+    mob.object.position.z += stepZ
+    return
+  }
+
+  // Remove only the blocked component so contact with a car behaves like frictionless sliding.
+  const canSlideX = Math.abs(stepX) > 0.0001 && !overlapsMatryoshkaVehicleObstacle(currentX + stepX, currentZ, matryoshkaObstaclePadding)
+  const canSlideZ = Math.abs(stepZ) > 0.0001 && !overlapsMatryoshkaVehicleObstacle(currentX, currentZ + stepZ, matryoshkaObstaclePadding)
+  if (canSlideX) mob.object.position.x += stepX
+  if (canSlideZ) mob.object.position.z += stepZ
+  if (!canSlideX) mob.velocity.x = 0
+  if (!canSlideZ) mob.velocity.z = 0
+  if (!canSlideX && !canSlideZ) mob.pathRefreshAt = 0
+}
+
 function getRandomKeySpawnPosition(): THREE.Vector3 | null {
   if (!parkingBounds || !parkingLotRoot) return null
 
@@ -498,9 +1123,7 @@ function getRandomKeySpawnPosition(): THREE.Vector3 | null {
     if (nearStoreEntry) continue
     if (overlapsParkingObstacle(x, z, 1.1)) continue
 
-    parkingGroundRaycaster.set(new THREE.Vector3(x, 30, z), new THREE.Vector3(0, -1, 0))
-    const hits = parkingGroundRaycaster.intersectObject(parkingLotRoot, true)
-    const hit = hits.find((intersection) => intersection.point.y >= bounds.min.y - 0.25)
+    const hit = getMatryoshkaGroundHit(x, z)
     if (!hit || !hit.face) continue
 
     const worldFaceNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
@@ -574,6 +1197,7 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
     car.updateMatrixWorld(true)
 
     const carTemplateBounds = new THREE.Box3().setFromObject(car)
+    matryoshkaVehicleHeight = carTemplateBounds.getSize(new THREE.Vector3()).y
     const slotMarker = parkingLot.getObjectByName('A')
     const slotBounds = slotMarker ? new THREE.Box3().setFromObject(slotMarker) : new THREE.Box3()
 
@@ -707,12 +1331,19 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
 
         const carWorldBounds = new THREE.Box3().setFromObject(parkedCar)
         const carCollisionBounds = carWorldBounds.clone().expandByScalar(0.04)
-        addParkingObstacle(carCollisionBounds)
+        addParkingObstacle(carCollisionBounds, false)
+        matryoshkaVehicleObstacles.push(carCollisionBounds)
+        const carHitboxHelper = new THREE.Box3Helper(carCollisionBounds, '#00ffff')
+        carHitboxHelper.visible = carHitboxSetting.checked
+        carHitboxHelper.renderOrder = 1006
+        carHitboxHelpers.push(carHitboxHelper)
         parkedCar.visible = !hideAllCarsSetting.checked
         parkedCars.push(parkedCar)
-        scene.add(parkedCar)
+        scene.add(parkedCar, carHitboxHelper)
       }
     }
+    rebuildMatryoshkaWaypoints()
+    spawnMatryoshkaMob()
     parkedCarsReady = true
   }, undefined, (error) => {
     console.error('Failed to load car model.', error)
@@ -857,12 +1488,15 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
     storeEntryPosition.set(storeBounds.min.x + Math.min(1.2, storeEntrySize.x * 0.12), playerHeight, (storeBounds.min.z + storeBounds.max.z) * 0.5)
     store.visible = false
 
-    const keyLoader = new FBXLoader()
-    const keyUrl = new URL('./assets/key/Key.fbx', import.meta.url).href
-    keyLoader.load(keyUrl, (keyModel) => {
+    const keyLoader = new GLTFLoader()
+    const keyUrl = new URL('./assets/key/lost_car_keys_tlou_inspired.glb', import.meta.url).href
+    keyLoader.load(keyUrl, (gltf) => {
+      const keyModel = gltf.scene
       keyPickupObject = keyModel
-      keyModel.scale.setScalar(0.55)
-      keyModel.rotation.x = Math.PI / 2
+      keyModel.updateMatrixWorld(true)
+      const keyBounds = new THREE.Box3().setFromObject(keyModel)
+      const keySize = keyBounds.getSize(new THREE.Vector3())
+      keyModel.scale.setScalar(1.4 / Math.max(keySize.x, keySize.y, keySize.z, 0.01))
 
       const keyMeshes: THREE.Mesh[] = []
       keyModel.traverse((object) => {
@@ -875,14 +1509,8 @@ parkingLotLoader.load(parkingLotUrl, (parkingLot) => {
           const materials = Array.isArray(object.material) ? object.material : [object.material]
 
           materials.forEach((material) => {
-            if (material instanceof THREE.MeshStandardMaterial) {
-              material.color = new THREE.Color('#1f2328')
-              material.metalness = 0.95
-              material.roughness = 0.32
-            }
-            if (material instanceof THREE.MeshPhongMaterial || material instanceof THREE.MeshLambertMaterial) {
-              material.color = new THREE.Color('#1f2328')
-            }
+            material.side = THREE.DoubleSide
+            material.needsUpdate = true
           })
         }
       })
@@ -1015,6 +1643,21 @@ trueCarEspSetting.addEventListener('change', () => {
   trueCarEspObjects.forEach((outline) => {
     outline.visible = trueCarEspSetting.checked
   })
+})
+carHitboxSetting.addEventListener('change', () => {
+  carHitboxHelpers.forEach((helper) => { helper.visible = carHitboxSetting.checked })
+})
+matryoshkaHitboxSetting.addEventListener('change', () => {
+  matryoshkaMobs.forEach((mob) => { mob.hitboxHelper.visible = matryoshkaHitboxSetting.checked })
+})
+matryoshkaVisionSetting.addEventListener('change', () => {
+  matryoshkaMobs.forEach((mob) => {
+    mob.visionIndicator.visible = matryoshkaVisionSetting.checked
+  })
+})
+waypointDisplaySetting.addEventListener('change', () => {
+  matryoshkaWaypointMarkers.forEach((marker) => { marker.visible = waypointDisplaySetting.checked })
+  matryoshkaRecoveryWaypointMarkers.forEach((marker) => { marker.visible = waypointDisplaySetting.checked })
 })
 document.querySelector<HTMLElement>('[data-category="targets"]')?.remove()
 document.querySelector<HTMLElement>('[data-category-panel="targets"]')?.remove()
@@ -1293,13 +1936,15 @@ const recoilRotation = new THREE.Quaternion()
 const aimingSpread = 0.004
 const hipfireSpread = 0.02
 let movementSpreadMultiplier = 2.25
+const sprintSpreadMultiplier = 1.2
 let aimingJumpSpreadMultiplier = 5.5
 let hipfireJumpSpreadMultiplier = 4.5
 function getShotSpread(moving: boolean, airborne: boolean): number {
   const baseSpread = aiming ? aimingSpread : hipfireSpread
   const movementMultiplier = moving ? movementSpreadMultiplier : 1
+  const sprintMultiplier = moving && (keys.has('ShiftLeft') || keys.has('ShiftRight')) ? sprintSpreadMultiplier : 1
   const jumpMultiplier = airborne ? aiming ? aimingJumpSpreadMultiplier : hipfireJumpSpreadMultiplier : 1
-  return baseSpread * spreadMultiplier * movementMultiplier * jumpMultiplier
+  return baseSpread * spreadMultiplier * movementMultiplier * sprintMultiplier * jumpMultiplier
 }
 
 function getSpreadPixels(moving: boolean, airborne: boolean): number {
@@ -1369,6 +2014,10 @@ function updatePointerSensitivity(): void {
 function handlePointerDown(event: PointerEvent): void {
   if (event.button === 0 && controls.isLocked) {
     event.preventDefault()
+    if (waypointEditSetting.checked) {
+      addMatryoshkaWaypointFromAim()
+      return
+    }
     warmGunshotAudio()
     leftButtonHeld = true
     fireShot()
@@ -1378,6 +2027,11 @@ function handlePointerDown(event: PointerEvent): void {
 function handleMouseDown(event: MouseEvent): void {
   if (event.button === 0 && controls.isLocked && !leftButtonHeld) {
     event.preventDefault()
+    if (waypointEditSetting.checked) {
+      addMatryoshkaWaypointFromAim()
+      leftButtonHeld = true
+      return
+    }
     warmGunshotAudio()
     leftButtonHeld = true
     fireShot()
@@ -1810,6 +2464,10 @@ function updateFullscreenButton(): void {
 }
 
 function handleKeyDown(event: KeyboardEvent): void {
+  if (playerDeathActive) {
+    event.preventDefault()
+    return
+  }
   if (event.code === 'Escape') {
     if (controls.isLocked) {
       event.preventDefault()
@@ -1873,6 +2531,7 @@ function showMenuView(view: 'home' | 'mode' | 'settings'): void {
 }
 
 function openMenu(): void {
+  if (playerDeathActive) return
   if (controls.isLocked) controls.unlock()
   showMenuView('home')
   settingsOverlay.classList.add('is-open')
@@ -1880,6 +2539,10 @@ function openMenu(): void {
 }
 
 function syncPauseMenu(): void {
+  if (playerDeathActive) {
+    settingsOverlay.classList.remove('is-open')
+    return
+  }
   const isPointerLockedToGameCanvas = document.pointerLockElement === canvas
   const shouldShowPauseMenu = !isPointerLockedToGameCanvas
   if (shouldShowPauseMenu) showMenuView('home')
@@ -1907,11 +2570,7 @@ settingsClose.addEventListener('click', () => {
 })
 menuSettingsButton.addEventListener('click', () => showMenuView('settings'))
 menuExitButton.addEventListener('click', () => {
-  if (window.electronAPI) {
-    window.electronAPI.quit()
-    return
-  }
-  window.close()
+  exitApplication()
 })
 settingsOverlay.addEventListener('click', (event) => {
   if (event.target === settingsOverlay) settingsClose.click()
@@ -2611,6 +3270,7 @@ function fireShot(): void {
   applyRecoil()
   shotOrigin.copy(getMuzzleWorldPosition())
   camera.getWorldPosition(cameraOrigin)
+  alertMatryoshkasToSound(cameraOrigin)
   camera.getWorldDirection(shotDirection)
   cameraRight.setFromMatrixColumn(camera.matrixWorld, 0)
   cameraUp.setFromMatrixColumn(camera.matrixWorld, 1)
@@ -2661,6 +3321,10 @@ resizeRenderer()
 
 const clock = new THREE.Clock()
 let weaponSwayFactor = 0
+let movementBobPhase = 0
+let cameraBobOffset = 0
+const cameraBobAxis = new THREE.Vector3(0, 0, 1)
+const cameraBobQuaternion = new THREE.Quaternion()
 let lastFrameAt = 0
 function render(): void {
   const frameNow = performance.now()
@@ -2668,14 +3332,32 @@ function render(): void {
   lastFrameAt = frameNow
   const delta = Math.min(clock.getDelta(), 0.05)
   const elapsed = clock.getElapsedTime()
+  if (!cameraBobQuaternion.equals(new THREE.Quaternion())) {
+    camera.quaternion.multiply(cameraBobQuaternion.invert())
+    cameraBobQuaternion.identity()
+  }
+  camera.position.y -= cameraBobOffset
+  cameraBobOffset = 0
   updateProjectiles(performance.now() / 1000, delta)
+  updateMatryoshkaMobs(performance.now() / 1000, delta)
+  if (playerDeathActive) {
+    playerDeathElapsed = Math.min(playerDeathElapsed + delta, 1.2)
+    const deathProgress = 1 - Math.exp(-5 * playerDeathElapsed)
+    camera.position.copy(playerDeathStartPosition)
+    camera.position.y -= 2.1 * deathProgress
+    playerDeathRotation.setFromEuler(new THREE.Euler(-1.42 * deathProgress, 0, 0.78 * deathProgress))
+    camera.quaternion.copy(playerDeathStartQuaternion).multiply(playerDeathRotation)
+    renderer.render(scene, camera)
+    return
+  }
 
   movement.set(0, 0, 0)
   if (controls.isLocked && !trueCarEntered) {
     direction.set(Number(keys.has('KeyD')) - Number(keys.has('KeyA')), 0, Number(keys.has('KeyW')) - Number(keys.has('KeyS')))
     if (direction.lengthSq() > 0) {
       direction.normalize()
-      movement.copy(direction).multiplyScalar(10 * delta)
+      const isRunning = keys.has('ShiftLeft') || keys.has('ShiftRight')
+      movement.copy(direction).multiplyScalar((isRunning ? playerRunSpeed : playerWalkSpeed) * delta)
       movePlayerWithCollision(movement)
     }
 
@@ -2695,17 +3377,39 @@ function render(): void {
   updateTrueCarSoundIndicator()
 
   const isMoving = controls.isLocked && direction.lengthSq() > 0
+  const isRunning = isMoving && (keys.has('ShiftLeft') || keys.has('ShiftRight'))
+  if (isRunning && elapsed - lastFootstepSoundAt >= 0.18) {
+    alertMatryoshkasToSound(camera.position)
+    lastFootstepSoundAt = elapsed
+  }
+  if (isMoving) movementBobPhase += delta * (isRunning ? 13 : 7)
+  else movementBobPhase += delta * 2
+  if (controls.isLocked && !trueCarEntered && isRunning) {
+    const bobStrength = 0.075
+    cameraBobOffset = Math.sin(movementBobPhase * 2) * bobStrength
+    camera.position.y += cameraBobOffset
+    const bobRoll = Math.sin(movementBobPhase) * (isRunning ? 0.018 : 0.006)
+    cameraBobQuaternion.setFromAxisAngle(cameraBobAxis, bobRoll)
+    camera.quaternion.multiply(cameraBobQuaternion)
+  } else if (cameraBobQuaternion.angleTo(new THREE.Quaternion()) > 0.0001) {
+    cameraBobQuaternion.slerp(new THREE.Quaternion(), Math.min(1, delta * 12))
+    camera.quaternion.multiply(cameraBobQuaternion)
+  }
   const isAirborne = controls.isLocked && camera.position.y > playerHeight + 0.05
   const stationarySpreadPixels = getSpreadPixels(false, false)
   const dynamicSpreadPixels = getSpreadPixels(isMoving, isAirborne)
-  const spreadPixels = crosshairDynamicEnabled
-    ? stationarySpreadPixels + (dynamicSpreadPixels - stationarySpreadPixels) * crosshairDynamicStrength
-    : stationarySpreadPixels
+  const sprintSpreadPixels = getSpreadPixels(true, false)
+  const spreadPixels = isRunning
+    ? sprintSpreadPixels
+    : crosshairDynamicEnabled
+      ? stationarySpreadPixels + (dynamicSpreadPixels - stationarySpreadPixels) * crosshairDynamicStrength
+      : stationarySpreadPixels
   const configuredGapScale = Number(crosshairGapSetting.value) / 14
   const crosshairGap = spreadPixels * configuredGapScale
   crosshair.style.setProperty('--crosshair-gap', `${crosshairGap}px`)
   weaponSwayFactor += ((isMoving ? 1 : 0) - weaponSwayFactor) * Math.min(1, delta * 10)
-  const swayAmount = weaponSwayFactor * (aiming ? 0.003 : 0.008)
+  const swayAmount = weaponSwayFactor * (aiming ? 0.003 : 0.008) * (isRunning ? 1.65 : 1)
+  const weaponSwayRate = isRunning ? 13 : 7
   const recoilEase = 1 - Math.exp(-38 * delta)
   const recoilPitchStep = (recoilPitch - appliedRecoilPitch) * recoilEase
   if (Math.abs(recoilPitchStep) > 0.000001) {
@@ -2716,8 +3420,8 @@ function render(): void {
   weaponRecoilVisual += (weaponRecoilPitch - weaponRecoilVisual) * (1 - Math.exp(-42 * delta))
   const weaponKick = weaponRecoilVisual * 0.8
   weapon.position.set(
-    weaponPosition.x + Math.sin(elapsed * 4.5) * swayAmount,
-    weaponPosition.y + Math.cos(elapsed * 2.25) * swayAmount * 0.65 + weaponKick * 0.45,
+    weaponPosition.x + Math.sin(movementBobPhase * weaponSwayRate / 7) * swayAmount,
+    weaponPosition.y + Math.cos(movementBobPhase * weaponSwayRate / 7 * 0.5) * swayAmount * 0.65 + weaponKick * 0.45,
     weaponPosition.z,
   )
   weapon.rotation.set(
