@@ -1,15 +1,15 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: './',
+  base: "./",
   server: {
-    host: 'localhost',
+    host: "localhost",
     port: 5173,
     strictPort: false,
   },
   build: {
-    target: 'es2022',
+    target: "es2022",
     sourcemap: true,
   },
-  assetsInclude: ['**/*.fbx', '**/*.blend', '**/*.stl', '**/*.mp3'],
-})
+  assetsInclude: ["**/*.fbx", "**/*.blend", "**/*.stl", "**/*.mp3"],
+});
