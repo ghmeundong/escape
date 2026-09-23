@@ -194,6 +194,12 @@ classroomSeatPrompt.className = "interaction-prompt";
 classroomSeatPrompt.textContent = "PRESS [F] TO SIT";
 classroomSeatPrompt.hidden = true;
 range.append(classroomSeatPrompt);
+const weaponModePrompt = document.createElement("div");
+weaponModePrompt.className = "weapon-mode-hud";
+weaponModePrompt.innerHTML =
+  '<span class="weapon-key-hint"><b>1</b> DRAW</span><span class="weapon-key-hint"><b>2</b> HOLSTER</span><span><b>F</b> INTERACT</span>';
+weaponModePrompt.hidden = true;
+staminaHud.append(weaponModePrompt);
 const episodeFadeOverlay = document.querySelector<HTMLElement>(
   ".episode-fade-overlay",
 )!;
@@ -793,6 +799,7 @@ const classroomStudentInitialRotations = new Map<
   THREE.Object3D,
   THREE.Quaternion
 >();
+const classroomStudentKnockdownUntil = new Map<THREE.Object3D, number>();
 let classroomBounds: THREE.Box3 | null = null;
 let storeRoot: THREE.Object3D | null = null;
 let storeBounds: THREE.Box3 | null = null;
@@ -820,6 +827,9 @@ let keyPickupObject: THREE.Object3D | null = null;
 let keyPickupCollected = false;
 let weaponPickupObject: THREE.Object3D | null = null;
 let weaponPickupCollected = false;
+let weaponDrawn = false;
+let weaponHolstering = false;
+let weaponRaising = false;
 let trueCar: THREE.Object3D | null = null;
 let trueCarEntered = false;
 let trueCarSoundPlaying = false;
@@ -1061,6 +1071,11 @@ function restartCurrentEpisode(): void {
   weaponReloading = false;
   weaponAmmo = 0;
   weapon.visible = false;
+  weaponDrawn = false;
+  weaponHolstering = false;
+  weaponRaising = false;
+  gsap.killTweensOf(weapon.position);
+  gsap.killTweensOf(weapon.rotation);
   playerStamina = playerMaxStamina;
   playerSprintActive = false;
   keyPickupCollected = false;
@@ -3117,7 +3132,7 @@ parkingLotLoader.load(
             objectSize.y > 5.5
           )
             return;
-          classroomObstacles.push(objectBounds.clone().expandByScalar(0.04));
+          classroomObstacles.push(objectBounds);
         });
 
         classroomRoot = classroom;
@@ -4354,7 +4369,10 @@ function getActiveAdsFov(): number {
 function setAiming(nextAiming: boolean): void {
   if (
     nextAiming &&
-    (!controls.isLocked || !weaponPickupCollected || trueCarEntered)
+    (!controls.isLocked ||
+      !weaponPickupCollected ||
+      !weaponDrawn ||
+      trueCarEntered)
   )
     return;
   aiming = nextAiming;
@@ -4407,6 +4425,7 @@ function handlePointerDown(event: PointerEvent): void {
     controls.isLocked &&
     !trueCarEntered &&
     weaponPickupCollected &&
+    weaponDrawn &&
     !weaponReloading
   ) {
     event.preventDefault();
@@ -4432,6 +4451,7 @@ function handleMouseDown(event: MouseEvent): void {
     controls.isLocked &&
     !trueCarEntered &&
     weaponPickupCollected &&
+    weaponDrawn &&
     !weaponReloading &&
     !leftButtonHeld
   ) {
@@ -4828,6 +4848,7 @@ const keys = new Set<string>();
 const movement = new THREE.Vector3();
 const direction = new THREE.Vector3();
 const playerHeight = 3.4;
+const playerCollisionRadius = 0.18;
 const gravity = 18;
 const jumpVelocity = 5.5;
 const keyPickupDistance = 4;
@@ -4857,13 +4878,17 @@ const trueCarInteractionDistance = 4.5;
 const trueCarInteractionAngle = 45;
 const classroomSeatPosition = new THREE.Vector3(1.32, 3.1, -2.241);
 const classroomSeatExitPosition = new THREE.Vector3(3.038, 0.125, -1.781);
-const classroomWeaponSpawnPosition = new THREE.Vector3(3.286, 0.125, 5.2);
+const classroomWeaponSpawnPosition = new THREE.Vector3(1.307, 2.36, -1.086);
 const classroomSeatExitCameraPosition = new THREE.Vector3();
 const classroomFrontDirection = new THREE.Vector3(0, 0, 1);
 const classroomSeatLookAt = new THREE.Vector3();
 const classroomSeatInteractionDistance = 2;
 const classroomSeatInteractionAngle = 55;
+const classroomStudentLookDirection = new THREE.Vector3();
+const classroomStudentToPlayerDirection = new THREE.Vector3();
 const weaponPickupDistance = 4;
+const weaponHolsterPosition = new THREE.Vector3(0.44, -1.45, -0.58);
+const weaponHolsterRotation = new THREE.Euler(0.72, 0.04, 0.02);
 const weaponPickupWorldPosition = new THREE.Vector3();
 const weaponPickupToPlayerDirection = new THREE.Vector3();
 let verticalVelocity = 0;
@@ -4894,11 +4919,18 @@ function isKeyWithinPickupRange(): boolean {
 }
 
 function updateKeyInteractionPrompt(): void {
+  weaponModePrompt.hidden = !controls.isLocked;
+  weaponModePrompt
+    .querySelectorAll<HTMLElement>(".weapon-key-hint")
+    .forEach((hint) => {
+      hint.hidden = !weaponPickupCollected;
+    });
   if (_isInClassroom) {
     keyPickupPrompt.hidden = true;
     weaponPickupPrompt.hidden = !isWeaponWithinPickupRange();
     trueCarPrompt.hidden = true;
-    classroomSeatPrompt.hidden = true;
+    classroomSeatPrompt.hidden =
+      !weaponPickupCollected || !isClassroomSeatWithinInteractionRange();
     vehicleSearchHint.textContent = "PRESS [F] TO STAND UP";
     vehicleSearchHint.hidden = !classroomSeatActive;
     return;
@@ -4941,14 +4973,24 @@ function sitAtClassroomSeat(force = false): void {
   if (!force && !isClassroomSeatWithinInteractionRange()) return;
   classroomStudents.forEach((student) => {
     const initialRotation = classroomStudentInitialRotations.get(student);
-    if (initialRotation) student.quaternion.copy(initialRotation);
+    if (initialRotation) {
+      gsap.killTweensOf(student.rotation);
+      student.quaternion.copy(initialRotation);
+    }
   });
+  classroomStudentKnockdownUntil.clear();
   classroomSeatLookAt.copy(classroomSeatPosition).add(classroomFrontDirection);
   camera.position.copy(classroomSeatPosition);
   camera.lookAt(classroomSeatLookAt);
   camera.updateMatrixWorld(true);
   classroomSeatActive = true;
   classroomSeatPrompt.hidden = true;
+  movementBobPhase = 0;
+  weaponSwayFactor = 0;
+  cameraBobOffset = 0;
+  cameraBobQuaternion.identity();
+  weapon.position.copy(weaponPosition);
+  weapon.rotation.copy(weaponRotation);
   verticalVelocity = 0;
   isGrounded = true;
   lastSafePlayerPosition.copy(classroomSeatPosition);
@@ -4958,8 +5000,73 @@ function sitAtClassroomSeat(force = false): void {
 function updateClassroomStudentsFacingPlayer(): void {
   if (!_isInClassroom || classroomSeatActive) return;
   classroomStudents.forEach((student) => {
+    if (classroomStudentKnockdownUntil.has(student)) return;
     student.lookAt(camera.position.x, student.position.y, camera.position.z);
   });
+}
+
+function knockDownClassroomStudent(student: THREE.Object3D, now: number): void {
+  const knockdownUntil = now + 3;
+  classroomStudentKnockdownUntil.set(student, knockdownUntil);
+  gsap.killTweensOf(student.rotation);
+  gsap.to(student.rotation, {
+    x: -Math.PI / 2,
+    duration: 0.18,
+    ease: "power2.out",
+    onComplete: () => {
+      window.setTimeout(
+        () => {
+          const initialRotation = classroomStudentInitialRotations.get(student);
+          if (!initialRotation) return;
+          classroomStudentKnockdownUntil.delete(student);
+          gsap.to(student.quaternion, {
+            x: initialRotation.x,
+            y: initialRotation.y,
+            z: initialRotation.z,
+            w: initialRotation.w,
+            duration: 0.25,
+            ease: "power2.out",
+          });
+        },
+        Math.max(0, (knockdownUntil - performance.now() / 1000) * 1000),
+      );
+    },
+  });
+}
+
+function updateClassroomFearState(): void {
+  if (
+    !_isInClassroom ||
+    classroomSeatActive ||
+    classroomStudents.length === 0
+  ) {
+    if (fearActive && (_isInClassroom || classroomSeatActive)) {
+      fearActive = false;
+      fearOverlay.classList.remove("is-visible");
+      updateHeartbeatPlaybackRate();
+    }
+    return;
+  }
+  const allStudentsWatching = classroomStudents.every((student) => {
+    if (!student.visible || student.position.distanceTo(camera.position) > 45)
+      return false;
+    student.getWorldDirection(classroomStudentLookDirection);
+    classroomStudentToPlayerDirection
+      .copy(camera.position)
+      .sub(student.position)
+      .normalize();
+    return (
+      classroomStudentLookDirection.dot(classroomStudentToPlayerDirection) >=
+        0.2 ||
+      classroomStudentLookDirection
+        .clone()
+        .negate()
+        .dot(classroomStudentToPlayerDirection) >= 0.92
+    );
+  });
+  fearActive = allStudentsWatching;
+  fearOverlay.classList.toggle("is-visible", fearActive);
+  updateHeartbeatPlaybackRate();
 }
 
 function isWeaponWithinPickupRange(): boolean {
@@ -4992,6 +5099,74 @@ function collectWeaponPickup(): void {
   weaponPickupObject.visible = false;
   weapon.visible = true;
   weaponPickupPrompt.hidden = true;
+  weaponDrawn = true;
+}
+
+function setWeaponDrawn(drawn: boolean): void {
+  if (!weaponPickupCollected || trueCarEntered) return;
+  if (drawn) {
+    weaponHolstering = false;
+    weaponRaising = true;
+    weaponDrawn = true;
+    weapon.visible = true;
+    gsap.killTweensOf(weapon.position);
+    gsap.killTweensOf(weapon.rotation);
+    weapon.position.copy(weaponHolsterPosition);
+    weapon.rotation.copy(weaponHolsterRotation);
+    gsap.to(weapon.position, {
+      x: weaponPosition.x,
+      y: weaponPosition.y,
+      z: weaponPosition.z,
+      duration: 0.3,
+      ease: "power2.out",
+      onComplete: () => {
+        weaponRaising = false;
+      },
+    });
+    gsap.to(weapon.rotation, {
+      x: weaponRotation.x,
+      y: weaponRotation.y,
+      z: weaponRotation.z,
+      duration: 0.3,
+      ease: "power2.out",
+    });
+  } else {
+    if (weaponHolstering || !weaponDrawn) return;
+    weaponHolstering = true;
+    weaponRaising = false;
+    setAiming(false);
+    stopAutomaticFire();
+    gsap.killTweensOf(weapon.position);
+    gsap.killTweensOf(weapon.rotation);
+    gsap.to(weapon.position, {
+      x: weaponHolsterPosition.x,
+      y: weaponHolsterPosition.y,
+      z: weaponHolsterPosition.z,
+      duration: 0.3,
+      ease: "power2.in",
+    });
+    gsap.to(weapon.rotation, {
+      x: weaponHolsterRotation.x,
+      y: weaponHolsterRotation.y,
+      z: weaponHolsterRotation.z,
+      duration: 0.3,
+      ease: "power2.in",
+      onComplete: () => {
+        if (!weaponHolstering) return;
+        weaponHolstering = false;
+        weaponDrawn = false;
+        weapon.visible = false;
+      },
+    });
+  }
+  weaponModePrompt.innerHTML = drawn
+    ? '<span class="weapon-key-hint is-active"><b>1</b> DRAW</span><span class="weapon-key-hint"><b>2</b> HOLSTER</span><span><b>F</b> INTERACT</span>'
+    : '<span class="weapon-key-hint"><b>1</b> DRAW</span><span class="weapon-key-hint is-active"><b>2</b> HOLSTER</span><span><b>F</b> INTERACT</span>';
+  weaponModePrompt
+    .querySelectorAll<HTMLElement>(".weapon-key-hint")
+    .forEach((hint) => {
+      hint.hidden = !weaponPickupCollected;
+    });
 }
 
 function placeWeaponPickupWhenReady(): void {
@@ -5283,7 +5458,9 @@ function handleKeyDown(event: KeyboardEvent): void {
     return;
   }
   if (event.code === "KeyF") {
-    if (classroomSeatActive && _isInClassroom) {
+    if (isWeaponWithinPickupRange()) {
+      collectWeaponPickup();
+    } else if (classroomSeatActive && _isInClassroom) {
       classroomSeatActive = false;
       classroomSeatExitCameraPosition.copy(classroomSeatExitPosition);
       classroomSeatExitCameraPosition.y += playerHeight;
@@ -5295,9 +5472,16 @@ function handleKeyDown(event: KeyboardEvent): void {
       hasSafePlayerPosition = true;
       updateKeyInteractionPrompt();
     } else if (isClassroomSeatWithinInteractionRange()) sitAtClassroomSeat();
-    else if (isWeaponWithinPickupRange()) collectWeaponPickup();
     else if (keyPickupCollected) enterTrueCar();
     else collectKeyPickup();
+    return;
+  }
+  if (event.code === "Digit1" || event.code === "Numpad1") {
+    setWeaponDrawn(true);
+    return;
+  }
+  if (event.code === "Digit2" || event.code === "Numpad2") {
+    setWeaponDrawn(false);
     return;
   }
   if (event.code === "KeyP") {
@@ -5440,6 +5624,9 @@ const enterEpisode = createEpisodeEntryController({
       sitAtClassroomSeat(true);
       vehicleSearchHint.textContent = "PRESS [F] TO STAND UP";
       updateKeyInteractionPrompt();
+    } else if (episodeId === "parking-lot") {
+      placeWeaponPickupWhenReady();
+      vehicleSearchHint.textContent = "[P]: PANIC BUTTON";
     } else {
       vehicleSearchHint.textContent = "[P]: PANIC BUTTON";
     }
@@ -5712,6 +5899,38 @@ function isCollisionSurface(object: THREE.Object3D): boolean {
   );
 }
 
+function getPlayerCollisionHeightBounds(): THREE.Vector2 {
+  function mergeOverlappingClassroomObstacles(): void {
+    for (let index = 0; index < classroomObstacles.length; index += 1) {
+      const current = classroomObstacles[index];
+      for (
+        let otherIndex = classroomObstacles.length - 1;
+        otherIndex > index;
+        otherIndex -= 1
+      ) {
+        const other = classroomObstacles[otherIndex];
+        const overlapsX =
+          current.min.x <= other.max.x && current.max.x >= other.min.x;
+        const overlapsY =
+          current.min.y <= other.max.y && current.max.y >= other.min.y;
+        const overlapsZ =
+          current.min.z <= other.max.z && current.max.z >= other.min.z;
+        if (!overlapsX || !overlapsY || !overlapsZ) continue;
+        current.union(other);
+        classroomObstacles.splice(otherIndex, 1);
+      }
+    }
+  }
+  if (_isInClassroom) {
+    return new THREE.Vector2(
+      camera.position.y - playerHeight,
+      camera.position.y + 0.2,
+    );
+    mergeOverlappingClassroomObstacles();
+  }
+  return new THREE.Vector2(camera.position.y - 0.8, camera.position.y + 0.8);
+}
+
 function resolveParkingCollision(): void {
   const activeBounds = _isInStore
     ? storeBounds
@@ -5727,7 +5946,7 @@ function resolveParkingCollision(): void {
   if (trueCarEntered) return;
   if (classroomSeatActive) return;
   isGrounded = false;
-  const playerRadius = 0.42;
+  const playerRadius = playerCollisionRadius;
   camera.position.x = THREE.MathUtils.clamp(
     camera.position.x,
     activeBounds.min.x + playerRadius,
@@ -5789,10 +6008,8 @@ function resolveParkingCollision(): void {
     verticalVelocity = 0;
     isGrounded = true;
   }
-  const playerHeightBounds = new THREE.Vector2(
-    camera.position.y - 0.8,
-    camera.position.y + 0.8,
-  );
+  const playerHeightBounds = getPlayerCollisionHeightBounds();
+  const collisionEpsilon = 0.01;
   const nearbyObstacles = _isInStore
     ? []
     : _isInClassroom
@@ -5817,12 +6034,12 @@ function resolveParkingCollision(): void {
     const pushBack = obstacle.max.z + playerRadius - camera.position.z;
     const smallestPush = Math.min(pushLeft, pushRight, pushFront, pushBack);
     if (smallestPush === pushLeft)
-      camera.position.x = obstacle.min.x - playerRadius;
+      camera.position.x = obstacle.min.x - playerRadius - collisionEpsilon;
     else if (smallestPush === pushRight)
-      camera.position.x = obstacle.max.x + playerRadius;
+      camera.position.x = obstacle.max.x + playerRadius + collisionEpsilon;
     else if (smallestPush === pushFront)
-      camera.position.z = obstacle.min.z - playerRadius;
-    else camera.position.z = obstacle.max.z + playerRadius;
+      camera.position.z = obstacle.min.z - playerRadius - collisionEpsilon;
+    else camera.position.z = obstacle.max.z + playerRadius + collisionEpsilon;
   }
 }
 
@@ -5833,17 +6050,17 @@ function movePlayerWithCollision(distance: THREE.Vector3): void {
   for (let stepIndex = 0; stepIndex < stepCount; stepIndex += 1) {
     const rightStep = new THREE.Vector3(step.x, 0, 0);
     const forwardStep = new THREE.Vector3(0, 0, step.z);
-    if (
-      !(_isInStore ? storeRoot : parkingLotRoot) ||
-      !isParkingWallAhead(rightStep)
-    ) {
+    if (_isInClassroom) {
+      controls.moveRight(rightStep.x);
+      controls.moveForward(forwardStep.z);
+      resolveParkingCollision();
+      continue;
+    }
+    if (!isParkingWallAhead(rightStep)) {
       controls.moveRight(rightStep.x);
       resolveParkingCollision();
     }
-    if (
-      !(_isInStore ? storeRoot : parkingLotRoot) ||
-      !isParkingWallAhead(forwardStep)
-    ) {
+    if (!isParkingWallAhead(forwardStep)) {
       controls.moveForward(forwardStep.z);
       resolveParkingCollision();
     }
@@ -6353,6 +6570,9 @@ function updateProjectiles(now: number, delta: number): void {
     let matryoshkaHit:
       | { mob: MatryoshkaMob; hit: THREE.Intersection<THREE.Object3D> }
       | undefined;
+    let classroomStudentHit:
+      | { student: THREE.Object3D; hit: THREE.Intersection<THREE.Object3D> }
+      | undefined;
     if (travelDistance > 0) {
       parkingProjectileRaycaster.set(
         projectile.previousPosition,
@@ -6394,10 +6614,46 @@ function updateProjectiles(now: number, delta: number): void {
             matryoshkaHit = { mob, hit: mobHit };
         }
       }
+      if (_isInClassroom) {
+        for (const student of classroomStudents) {
+          if (classroomStudentKnockdownUntil.has(student)) continue;
+          const studentHit = parkingProjectileRaycaster.intersectObject(
+            student,
+            true,
+          )[0];
+          if (
+            studentHit &&
+            (!classroomStudentHit ||
+              studentHit.distance < classroomStudentHit.hit.distance)
+          )
+            classroomStudentHit = { student, hit: studentHit };
+        }
+      }
     }
     projectile.previousPosition.copy(projectilePosition);
     const hitFloor = translation.y <= projectileRadius + 0.01;
     if (
+      classroomStudentHit &&
+      (!parkingSurfaceHit ||
+        classroomStudentHit.hit.distance <= parkingSurfaceHit.distance)
+    ) {
+      const impactNormal = classroomStudentHit.hit.face
+        ? classroomStudentHit.hit.face.normal
+            .clone()
+            .applyNormalMatrix(
+              new THREE.Matrix3().getNormalMatrix(
+                classroomStudentHit.hit.object.matrixWorld,
+              ),
+            )
+            .normalize()
+        : new THREE.Vector3(0, 1, 0);
+      createImpactSpark(
+        classroomStudentHit.hit.point,
+        impactNormal,
+        projectileTravel.normalize(),
+      );
+      knockDownClassroomStudent(classroomStudentHit.student, now);
+    } else if (
       matryoshkaHit &&
       (!parkingSurfaceHit ||
         matryoshkaHit.hit.distance <= parkingSurfaceHit.distance)
@@ -6441,6 +6697,7 @@ function updateProjectiles(now: number, delta: number): void {
         projectileTravel.normalize(),
       );
     if (
+      classroomStudentHit ||
       matryoshkaHit ||
       parkingSurfaceHit ||
       hitFloor ||
@@ -6760,6 +7017,8 @@ function render(): void {
       verticalVelocity = 0;
       isGrounded = true;
     }
+  } else if (controls.isLocked && classroomSeatActive) {
+    updatePlayerStamina(delta);
   }
   if (trueCarEntered) updateTrueCarSeatPosition();
   else resolveParkingCollision();
@@ -6790,6 +7049,7 @@ function render(): void {
   updateKeyInteractionPrompt();
   updateTrueCarSoundIndicator();
   updateClassroomStudentsFacingPlayer();
+  updateClassroomFearState();
 
   const isMoving = controls.isLocked && direction.lengthSq() > 0;
   const isRunning =
@@ -6854,21 +7114,23 @@ function render(): void {
   weaponRecoilVisual +=
     (weaponRecoilPitch - weaponRecoilVisual) * (1 - Math.exp(-42 * delta));
   const weaponKick = weaponRecoilVisual * 0.8;
-  weapon.position.set(
-    weaponPosition.x +
-      Math.sin((movementBobPhase * weaponSwayRate) / 7) * swayAmount,
-    weaponPosition.y +
-      Math.cos(((movementBobPhase * weaponSwayRate) / 7) * 0.5) *
-        swayAmount *
-        0.65 +
-      weaponKick * 0.45,
-    weaponPosition.z,
-  );
-  weapon.rotation.set(
-    weaponRotation.x + weaponRecoilPitch * 0.8,
-    weaponRotation.y,
-    weaponRotation.z,
-  );
+  if (!weaponHolstering && !weaponRaising) {
+    weapon.position.set(
+      weaponPosition.x +
+        Math.sin((movementBobPhase * weaponSwayRate) / 7) * swayAmount,
+      weaponPosition.y +
+        Math.cos(((movementBobPhase * weaponSwayRate) / 7) * 0.5) *
+          swayAmount *
+          0.65 +
+        weaponKick * 0.45,
+      weaponPosition.z,
+    );
+    weapon.rotation.set(
+      weaponRotation.x + weaponRecoilPitch * 0.8,
+      weaponRotation.y,
+      weaponRotation.z,
+    );
+  }
   if (weaponReloading) {
     const reloadProgress = THREE.MathUtils.clamp(
       (gunshotAudioContext.currentTime - weaponReloadStartedAt) /
