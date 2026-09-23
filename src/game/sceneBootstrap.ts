@@ -11,6 +11,7 @@ export function setupEpisodePreviewScenes(params: {
   parkingLotRoot: () => THREE.Object3D | null;
   parkedCars: () => THREE.Object3D[];
   classroomRoot: () => THREE.Object3D | null;
+  classroomStudents: () => THREE.Object3D[];
   storeRoot: () => THREE.Object3D | null;
 }): void {
   const parkingScene = new THREE.Scene();
@@ -81,7 +82,7 @@ export function setupEpisodePreviewScenes(params: {
   classroomLight.position.set(-8, 12, 8);
   classroomScene.add(classroomLight);
   const classroomCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-  classroomCamera.position.set(8, 6, 8);
+  classroomCamera.position.set(7.2, 5.6, 7.2);
   classroomCamera.lookAt(0, 2, 0);
 
   const classroomRenderer = new THREE.WebGLRenderer({
@@ -94,6 +95,7 @@ export function setupEpisodePreviewScenes(params: {
   classroomScene.add(classroomGroup);
 
   let classroomReady = false;
+  let classroomStudentsReady = false;
   let lastClassroomFrameAt = 0;
   classroomRenderer.setAnimationLoop(() => {
     if (!params.episodeScreen.classList.contains("is-visible")) return;
@@ -118,9 +120,26 @@ export function setupEpisodePreviewScenes(params: {
       const root = params.classroomRoot();
       if (root) {
         const clone = root.clone(true);
-        clone.position.set(0, 0, 0);
+        clone.visible = true;
+        clone.traverse((object) => {
+          object.visible = true;
+        });
         classroomGroup.add(clone);
         classroomReady = true;
+      }
+    }
+    if (classroomReady && !classroomStudentsReady) {
+      const students = params.classroomStudents();
+      if (students.length > 0) {
+        students.forEach((student) => {
+          const studentClone = student.clone(true);
+          studentClone.visible = true;
+          studentClone.traverse((object) => {
+            object.visible = true;
+          });
+          classroomGroup.add(studentClone);
+        });
+        classroomStudentsReady = true;
       }
     }
 

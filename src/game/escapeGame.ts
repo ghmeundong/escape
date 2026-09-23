@@ -2239,7 +2239,7 @@ function updateClassroomTeacher(now: number): void {
     const playerIsLookingAtTeacher =
       teacherIsOnScreen &&
       playerForward.dot(cameraToTeacher) >=
-        Math.cos(THREE.MathUtils.degToRad(35));
+        Math.cos(THREE.MathUtils.degToRad(45));
     if (weaponDrawn || !classroomSeatActive || !playerIsLookingAtTeacher)
       triggerClassroomDangerDeath(classroomTeacher, now);
   }
@@ -5352,7 +5352,7 @@ function updateKeyInteractionPrompt(): void {
       !weaponPickupCollected || !isClassroomSeatWithinInteractionRange();
     if (classroomSeatActive) {
       vehicleSearchHint.textContent = "PRESS [F] TO STAND UP";
-      vehicleSearchHint.hidden = false;
+      vehicleSearchHint.hidden = !weaponPickupPrompt.hidden;
     }
     return;
   }
@@ -6276,6 +6276,7 @@ setupEpisodePreviewScenes({
   parkingLotRoot: () => parkingLotRoot,
   parkedCars: () => parkedCars,
   classroomRoot: () => classroomRoot,
+  classroomStudents: () => classroomStudents,
   storeRoot: () => storeRoot,
 });
 
