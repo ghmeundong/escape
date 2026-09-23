@@ -6,7 +6,9 @@ export function bindScreenFlow(
   menuHome: HTMLElement,
   modeMenu: HTMLElement,
 ): {
-  showMenuView: (view: "home" | "mode" | "settings") => void;  getActiveMenuView: () => "home" | "mode" | "settings";  openMenu: () => void;
+  showMenuView: (view: "home" | "mode" | "settings") => void;
+  getActiveMenuView: () => "home" | "mode" | "settings";
+  openMenu: () => void;
   closeMenu: () => void;
   returnToHome: () => void;
 } {
@@ -51,8 +53,9 @@ export function bindEpisodeSelection(
   startPlayButton: HTMLButtonElement,
   episodeScreen: HTMLElement,
   parkingLotEpisodeButton: HTMLButtonElement,
+  classroomEpisodeButton: HTMLButtonElement,
   storeEpisodeButton: HTMLButtonElement,
-  startEpisode: (episodeId: "parking-lot" | "store") => void,
+  startEpisode: (episodeId: "parking-lot" | "classroom" | "store") => void,
 ): void {
   startPlayButton.addEventListener("click", () => {
     startScreen.classList.remove("is-visible");
@@ -61,6 +64,9 @@ export function bindEpisodeSelection(
 
   parkingLotEpisodeButton.addEventListener("click", () =>
     startEpisode("parking-lot"),
+  );
+  classroomEpisodeButton.addEventListener("click", () =>
+    startEpisode("classroom"),
   );
   storeEpisodeButton.addEventListener("click", () => startEpisode("store"));
 }

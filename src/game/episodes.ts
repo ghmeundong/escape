@@ -1,13 +1,15 @@
-export type EpisodeId = "parking-lot" | "store";
+export type EpisodeId = "parking-lot" | "classroom" | "store";
 
 export const EPISODE_STORAGE_KEY = "escape-current-episode";
 
 export const EPISODE_LABELS: Record<EpisodeId, string> = {
   "parking-lot": "Parking lot",
+  classroom: "Classroom",
   store: "Store",
 };
 
 export function resolveEpisodeId(value?: string | null): EpisodeId {
+  if (value === "classroom") return "classroom";
   if (value === "store") return "store";
   return "parking-lot";
 }
