@@ -5481,7 +5481,7 @@ function knockDownClassroomStudent(
   const fallAxis = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
   const fallQuaternion = new THREE.Quaternion().setFromAxisAngle(
     fallAxis,
-    Math.PI / 2,
+    -Math.PI / 2,
   );
   const targetQuaternion = student.quaternion.clone().premultiply(fallQuaternion);
   gsap.to(student.quaternion, {
