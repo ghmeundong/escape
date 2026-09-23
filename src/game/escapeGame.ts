@@ -789,6 +789,10 @@ let parkingBounds: THREE.Box3 | null = null;
 let parkingLotRoot: THREE.Object3D | null = null;
 let classroomRoot: THREE.Object3D | null = null;
 const classroomStudents: THREE.Object3D[] = [];
+const classroomStudentInitialRotations = new Map<
+  THREE.Object3D,
+  THREE.Quaternion
+>();
 let classroomBounds: THREE.Box3 | null = null;
 let storeRoot: THREE.Object3D | null = null;
 let storeBounds: THREE.Box3 | null = null;
@@ -3211,6 +3215,10 @@ parkingLotLoader.load(
               studentClone.position.set(x, y, z);
               studentClone.visible = _isInClassroom;
               classroomStudents.push(studentClone);
+              classroomStudentInitialRotations.set(
+                studentClone,
+                studentClone.quaternion.clone(),
+              );
               scene.add(studentClone);
             });
           },
@@ -4849,6 +4857,7 @@ const trueCarInteractionDistance = 4.5;
 const trueCarInteractionAngle = 45;
 const classroomSeatPosition = new THREE.Vector3(1.32, 3.1, -2.241);
 const classroomSeatExitPosition = new THREE.Vector3(3.038, 0.125, -1.781);
+const classroomWeaponSpawnPosition = new THREE.Vector3(3.286, 0.125, 5.2);
 const classroomSeatExitCameraPosition = new THREE.Vector3();
 const classroomFrontDirection = new THREE.Vector3(0, 0, 1);
 const classroomSeatLookAt = new THREE.Vector3();
@@ -4930,6 +4939,10 @@ function isClassroomSeatWithinInteractionRange(): boolean {
 
 function sitAtClassroomSeat(force = false): void {
   if (!force && !isClassroomSeatWithinInteractionRange()) return;
+  classroomStudents.forEach((student) => {
+    const initialRotation = classroomStudentInitialRotations.get(student);
+    if (initialRotation) student.quaternion.copy(initialRotation);
+  });
   classroomSeatLookAt.copy(classroomSeatPosition).add(classroomFrontDirection);
   camera.position.copy(classroomSeatPosition);
   camera.lookAt(classroomSeatLookAt);
@@ -4940,6 +4953,13 @@ function sitAtClassroomSeat(force = false): void {
   isGrounded = true;
   lastSafePlayerPosition.copy(classroomSeatPosition);
   hasSafePlayerPosition = true;
+}
+
+function updateClassroomStudentsFacingPlayer(): void {
+  if (!_isInClassroom || classroomSeatActive) return;
+  classroomStudents.forEach((student) => {
+    student.lookAt(camera.position.x, student.position.y, camera.position.z);
+  });
 }
 
 function isWeaponWithinPickupRange(): boolean {
@@ -4980,6 +5000,17 @@ function placeWeaponPickupWhenReady(): void {
   const activeBounds = _isInClassroom ? classroomBounds : parkingBounds;
   if (!activeRoot || !activeBounds || (!_isInClassroom && !parkedCarsReady)) {
     requestAnimationFrame(placeWeaponPickupWhenReady);
+    return;
+  }
+  if (_isInClassroom) {
+    weaponPickupObject.position.copy(classroomWeaponSpawnPosition);
+    weaponPickupObject.rotation.set(
+      0,
+      Math.random() * Math.PI * 2,
+      Math.PI / 2,
+    );
+    weaponPickupObject.visible = !weaponPickupCollected;
+    scene.add(weaponPickupObject);
     return;
   }
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -6328,8 +6359,16 @@ function updateProjectiles(now: number, delta: number): void {
         projectileTravel.normalize(),
       );
       parkingProjectileRaycaster.far = travelDistance + projectileRadius;
-      const parkingLotHit = parkingLotRoot
-        ? parkingProjectileRaycaster.intersectObject(parkingLotRoot, true)[0]
+      const activeProjectileRoot = _isInClassroom
+        ? classroomRoot
+        : _isInStore
+          ? storeRoot
+          : parkingLotRoot;
+      const parkingLotHit = activeProjectileRoot
+        ? parkingProjectileRaycaster.intersectObject(
+            activeProjectileRoot,
+            true,
+          )[0]
         : undefined;
       const parkedCarHit =
         parkedCars.length > 0
@@ -6750,6 +6789,7 @@ function render(): void {
   updateInfiniteFloor();
   updateKeyInteractionPrompt();
   updateTrueCarSoundIndicator();
+  updateClassroomStudentsFacingPlayer();
 
   const isMoving = controls.isLocked && direction.lengthSq() > 0;
   const isRunning =
