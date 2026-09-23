@@ -429,6 +429,10 @@ button {
   opacity: 1;
   transition: opacity 10s linear;
 }
+.episode-fade-overlay.is-complete {
+  opacity: 1;
+  transition: none;
+}
 .fear-overlay,
 .death-overlay {
   position: absolute;
@@ -718,6 +722,34 @@ button {
   font-size: 9px;
   letter-spacing: 1.2px;
   pointer-events: none;
+}
+.classroom-door-progress-ring {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.classroom-door-progress-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.classroom-door-progress-ring circle {
+  fill: none;
+  stroke-width: 4;
+}
+.door-progress-track {
+  stroke: rgba(214, 221, 224, 0.2);
+}
+.door-progress-fill {
+  stroke: #d6dde0;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.04s linear;
 }
 .stamina-hud {
   position: absolute;

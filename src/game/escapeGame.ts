@@ -157,6 +157,19 @@ vehicleSearchHint.className = "vehicle-search-hint";
 vehicleSearchHint.textContent = "[P]: PANIC BUTTON";
 vehicleSearchHint.hidden = true;
 range.append(vehicleSearchHint);
+const classroomDoorProgressRing = document.createElement("div");
+classroomDoorProgressRing.className = "classroom-door-progress-ring";
+classroomDoorProgressRing.innerHTML =
+  '<svg viewBox="0 0 58 58" aria-hidden="true"><circle class="door-progress-track" cx="29" cy="29" r="24"></circle><circle class="door-progress-fill" cx="29" cy="29" r="24"></circle></svg>';
+const classroomDoorProgressFill =
+  classroomDoorProgressRing.querySelector<SVGCircleElement>(
+    ".door-progress-fill",
+  )!;
+const classroomDoorProgressCircumference = 2 * Math.PI * 24;
+classroomDoorProgressFill.style.strokeDasharray = `${classroomDoorProgressCircumference}`;
+classroomDoorProgressFill.style.strokeDashoffset = `${classroomDoorProgressCircumference}`;
+classroomDoorProgressRing.hidden = true;
+range.append(classroomDoorProgressRing);
 const staminaHud = document.createElement("div");
 staminaHud.className = "stamina-hud";
 staminaHud.innerHTML = `
@@ -646,6 +659,14 @@ const matryoshkaVisionToggleLabel = document.createElement("label");
 matryoshkaVisionToggleLabel.className = "toggle-row";
 matryoshkaVisionToggleLabel.textContent = "MATRYOSHKA VISION RANGE ";
 matryoshkaVisionToggleLabel.append(matryoshkaVisionSetting);
+const teacherAiSetting = document.createElement("input");
+teacherAiSetting.id = "teacher-ai-setting";
+teacherAiSetting.type = "checkbox";
+teacherAiSetting.checked = false;
+const teacherAiToggleLabel = document.createElement("label");
+teacherAiToggleLabel.className = "toggle-row";
+teacherAiToggleLabel.textContent = "TEACHER AI OFF ";
+teacherAiToggleLabel.append(teacherAiSetting);
 const mapPointSetting = document.createElement("input");
 mapPointSetting.id = "map-point-setting";
 mapPointSetting.type = "checkbox";
@@ -664,6 +685,7 @@ developerTestGroup.append(
   carHitboxToggleLabel,
   matryoshkaHitboxToggleLabel,
   matryoshkaVisionToggleLabel,
+  teacherAiToggleLabel,
   mapPointToggleLabel,
 );
 const developerCategoryButton = document.createElement("button");
@@ -795,6 +817,7 @@ let parkingBounds: THREE.Box3 | null = null;
 let parkingLotRoot: THREE.Object3D | null = null;
 let classroomRoot: THREE.Object3D | null = null;
 const classroomStudents: THREE.Object3D[] = [];
+const classroomDeadStudents = new Set<THREE.Object3D>();
 const classroomStudentInitialRotations = new Map<
   THREE.Object3D,
   THREE.Quaternion
@@ -822,6 +845,7 @@ const keyEspObjects: THREE.Object3D[] = [];
 const trueCarEspObjects: THREE.Object3D[] = [];
 let parkedCarsReady = false;
 let gameplayStarted = false;
+let gameplayPaused = true;
 let episodeEntryLoading = false;
 let keyPickupObject: THREE.Object3D | null = null;
 let keyPickupCollected = false;
@@ -835,6 +859,8 @@ let trueCarEntered = false;
 let trueCarSoundPlaying = false;
 let classroomSeatActive = false;
 let fearActive = false;
+let parkingLotFearActive = false;
+let classroomFearActive = false;
 let carEndingShakeStartedAt = -Infinity;
 let carEndingShakePeaks: number[] = [];
 type MatryoshkaMobState = "wander" | "investigate" | "chase";
@@ -873,6 +899,27 @@ type MatryoshkaMob = {
   playerVisible: boolean;
 };
 const matryoshkaMobs: MatryoshkaMob[] = [];
+let classroomTeacher: MatryoshkaMob | null = null;
+let classroomTeacherTurned = false;
+let classroomTeacherTurnUntil = -Infinity;
+let classroomTeacherNextTurnAt = -Infinity;
+let classroomTeacherTurnPendingAt = -Infinity;
+let classroomTeacherStudentTurnAt = -Infinity;
+let classroomTeacherReturning = false;
+let classroomTeacherReturnStartedAt = -Infinity;
+const classroomTeacherReturnDuration = 0.8;
+const classroomTeacherReturnQuaternion = new THREE.Quaternion();
+let classroomStudentsAlerted = false;
+let classroomBellBuffer: AudioBuffer | null = null;
+let classroomBellSource: AudioBufferSourceNode | null = null;
+let classroomBellPlaying = false;
+let classroomBellNextAt = -Infinity;
+const classroomBellPlaybackRate = 1.35;
+const classroomBellInterval = 20;
+const classroomTeacherTurnDelayMin = 8;
+const classroomTeacherTurnDelayMax = 12;
+const classroomTeacherLookDurationMin = 1;
+const classroomTeacherLookDurationMax = 3;
 const matryoshkaWaypoints: THREE.Vector3[] = [];
 const matryoshkaRecoveryWaypoints: THREE.Vector3[] = [];
 const matryoshkaWaypointMarkers: THREE.Mesh[] = [];
@@ -995,13 +1042,67 @@ let matryoshkaCarSoundVersion = 0;
 let lastFootstepSoundAt = -Infinity;
 let playerDeathActive = false;
 let playerDeathElapsed = 0;
+let classroomContactDeathPending = false;
+let classroomContactDeathAt = -Infinity;
 const playerDeathStartPosition = new THREE.Vector3();
 const playerDeathStartQuaternion = new THREE.Quaternion();
 const playerDeathRotation = new THREE.Quaternion();
 const _playerDeathAxis = new THREE.Vector3(0, 0, 1);
+const classroomContactPosition = new THREE.Vector3();
+const classroomContactDirection = new THREE.Vector3();
+
+function triggerClassroomDangerDeath(
+  teacher: MatryoshkaMob,
+  now: number,
+): void {
+  if (playerDeathActive || classroomContactDeathPending) return;
+  camera.getWorldDirection(classroomContactDirection);
+  classroomContactPosition
+    .copy(camera.position)
+    .addScaledVector(classroomContactDirection, 1.5);
+  classroomContactPosition.y = camera.position.y - 2.3;
+  teacher.object.position.copy(classroomContactPosition);
+  teacher.object.lookAt(
+    camera.position.x,
+    teacher.object.position.y,
+    camera.position.z,
+  );
+  teacher.object.rotateY(Math.PI / 2);
+  teacher.object.rotateY(Math.PI);
+  teacher.object.updateMatrixWorld(true);
+  const closeupBounds = new THREE.Box3().setFromObject(teacher.object);
+  const closeupCenter = closeupBounds.getCenter(new THREE.Vector3());
+  const closeupVerticalOffset = classroomSeatActive ? -1.0 : -1.35;
+  teacher.object.position.y +=
+    camera.position.y - 0.1 - closeupCenter.y + closeupVerticalOffset;
+  teacher.velocity.set(0, 0, 0);
+  teacher.route = [];
+  teacher.physicsBody.setTranslation(
+    {
+      x: teacher.object.position.x,
+      y: teacher.object.position.y + teacher.physicsOffsetY,
+      z: teacher.object.position.z,
+    },
+    true,
+  );
+  teacher.physicsBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  classroomContactDeathPending = true;
+  classroomContactDeathAt = now + 0.3;
+}
 
 function triggerPlayerDeath(): void {
   if (playerDeathActive) return;
+  classroomContactDeathPending = false;
+  classroomContactDeathAt = -Infinity;
+  classroomBackDoorOpening = false;
+  classroomBackDoorOpened = false;
+  classroomBackDoorOpeningStartedAt = -Infinity;
+  if (classroomBackDoorOpeningTimer !== null) {
+    window.clearTimeout(classroomBackDoorOpeningTimer);
+    classroomBackDoorOpeningTimer = null;
+  }
+  classroomDoorProgressRing.hidden = true;
+  classroomDoorProgressFill.style.strokeDashoffset = `${classroomDoorProgressCircumference}`;
   playerDeathActive = true;
   playerDeathElapsed = 0;
   playerDeathStartPosition.copy(camera.position);
@@ -1059,6 +1160,7 @@ function restartCurrentEpisode(): void {
   deathOverlay.classList.remove("is-visible");
   deathScreen.classList.remove("is-visible");
   episodeFadeOverlay.classList.remove("is-fading");
+  episodeFadeOverlay.classList.remove("is-complete");
   controls.unlock();
   keys.clear();
   stopAutomaticFire();
@@ -1068,7 +1170,7 @@ function restartCurrentEpisode(): void {
   resetRecoilState();
   verticalVelocity = 0;
   isGrounded = false;
-  weaponReloading = false;
+  cancelWeaponReload();
   weaponAmmo = 0;
   weapon.visible = false;
   weaponDrawn = false;
@@ -1085,6 +1187,36 @@ function restartCurrentEpisode(): void {
   trueCarEntered = false;
   trueCarSoundPlaying = false;
   classroomSeatActive = false;
+  classroomStudentKnockdownUntil.clear();
+  classroomDeadStudents.clear();
+  classroomStudentsAlerted = false;
+  classroomTeacherTurned = false;
+  classroomTeacherTurnUntil = -Infinity;
+  classroomTeacherNextTurnAt = -Infinity;
+  classroomTeacherTurnPendingAt = -Infinity;
+  classroomTeacherStudentTurnAt = -Infinity;
+  classroomBellNextAt = -Infinity;
+  classroomBellPlaying = false;
+  if (classroomBellSource) {
+    classroomBellSource.stop();
+    classroomBellSource.disconnect();
+    classroomBellSource = null;
+  }
+  classroomTeacherReturning = false;
+  classroomTeacherReturnStartedAt = -Infinity;
+  classroomContactDeathPending = false;
+  classroomContactDeathAt = -Infinity;
+  classroomTeacherStudentTurnAt = -Infinity;
+  if (classroomTeacher) {
+    gsap.killTweensOf(classroomTeacher.object.rotation);
+    gsap.killTweensOf(classroomTeacher.object.quaternion);
+    classroomTeacher.object.quaternion.copy(classroomTeacher.initialQuaternion);
+  }
+  classroomStudents.forEach((student) => {
+    gsap.killTweensOf(student.rotation);
+    gsap.killTweensOf(student.quaternion);
+    student.quaternion.copy(classroomStudentInitialRotations.get(student) ?? student.quaternion);
+  });
   if (trueCar) trueCar.visible = true;
   keyEspObjects.forEach((outline) => {
     outline.visible = keyEspSetting.checked;
@@ -1161,6 +1293,7 @@ function restartCurrentEpisode(): void {
     heartbeatSoundReady,
     playHeartbeatSound,
   });
+  if (_isInClassroom) sitAtClassroomSeat(true);
   syncEpisodeOnlyObjects();
 }
 
@@ -1374,11 +1507,36 @@ function addMapPointFromAim(): void {
 
 let mapPointPointerDownHandled = false;
 
+function turnClassroomTeacherTowardPlayer(now: number): void {
+  if (!classroomTeacher || classroomTeacher.knockedDownAt > 0) return;
+  classroomTeacherTurnPendingAt = -Infinity;
+  classroomTeacher.object.quaternion.copy(classroomTeacher.initialQuaternion);
+  classroomTeacher.object.rotateY(Math.PI);
+  classroomTeacherTurned = true;
+  classroomTeacherTurnUntil =
+    now +
+    classroomTeacherLookDurationMin +
+    Math.random() *
+      (classroomTeacherLookDurationMax - classroomTeacherLookDurationMin);
+}
+
+function scheduleClassroomTeacherTurn(now: number): void {
+  if (!classroomTeacher || classroomTeacherTurned) return;
+  classroomTeacherTurnPendingAt = now + 0.7;
+}
+
+function alertClassroomStudents(now: number): void {
+  if (classroomStudentsAlerted) return;
+  classroomStudentsAlerted = true;
+  classroomTeacherStudentTurnAt = now + 3;
+}
+
 function alertMatryoshkasToSound(
   position: THREE.Vector3,
   source: MatryoshkaSoundSource = "player",
   interruptChase = false,
 ): void {
+  if (_isInClassroom && source === "player" && classroomBellPlaying) return;
   const soundTarget =
     source === "player" ? matryoshkaSoundTarget : matryoshkaCarSoundTarget;
   if (source === "player") matryoshkaSoundVersion += 1;
@@ -1387,6 +1545,9 @@ function alertMatryoshkasToSound(
 
   const currentSoundVersion =
     source === "player" ? matryoshkaSoundVersion : matryoshkaCarSoundVersion;
+
+  if (source === "player")
+    scheduleClassroomTeacherTurn(performance.now() / 1000);
 
   matryoshkaMobs.forEach((mob) => {
     if (mob.state === "chase" && !interruptChase) return;
@@ -1993,10 +2154,109 @@ function recoverMatryoshkaMob(mob: MatryoshkaMob): void {
   chooseMatryoshkaTarget(mob);
 }
 
+function updateClassroomTeacher(now: number): void {
+  if (teacherAiSetting.checked || !classroomTeacher || classroomTeacher.knockedDownAt > 0)
+    return;
+  if (classroomTeacherReturning) {
+    const returnProgress = THREE.MathUtils.clamp(
+      (now - classroomTeacherReturnStartedAt) /
+        classroomTeacherReturnDuration,
+      0,
+      1,
+    );
+    classroomTeacher.object.quaternion
+      .copy(classroomTeacherReturnQuaternion)
+      .slerp(classroomTeacher.initialQuaternion, returnProgress);
+    if (returnProgress >= 1) {
+      classroomTeacherReturning = false;
+      classroomStudentsAlerted = false;
+      classroomTeacherStudentTurnAt = -Infinity;
+      classroomStudents.forEach((student) => {
+        if (classroomDeadStudents.has(student)) return;
+        const initialRotation = classroomStudentInitialRotations.get(student);
+        if (initialRotation) student.quaternion.copy(initialRotation);
+      });
+      classroomTeacherNextTurnAt =
+        now +
+        classroomTeacherTurnDelayMin +
+        Math.random() *
+          (classroomTeacherTurnDelayMax - classroomTeacherTurnDelayMin);
+    }
+    return;
+  }
+  if (classroomContactDeathPending) {
+    if (now >= classroomContactDeathAt) triggerPlayerDeath();
+    return;
+  }
+  if (
+    Number.isFinite(classroomTeacherStudentTurnAt) &&
+    now >= classroomTeacherStudentTurnAt
+  ) {
+    classroomTeacherStudentTurnAt = -Infinity;
+    turnClassroomTeacherTowardPlayer(now);
+    void chaseSoundReady.then(playChaseSound);
+  }
+  if (
+    Number.isFinite(classroomTeacherTurnPendingAt) &&
+    now >= classroomTeacherTurnPendingAt
+  ) {
+    turnClassroomTeacherTowardPlayer(now);
+    void chaseSoundReady.then(playChaseSound);
+  }
+  if (!Number.isFinite(classroomTeacherNextTurnAt))
+    classroomTeacherNextTurnAt =
+      now +
+      classroomTeacherTurnDelayMin +
+      Math.random() *
+        (classroomTeacherTurnDelayMax - classroomTeacherTurnDelayMin);
+
+  if (classroomTeacherTurned) {
+    if (now >= classroomTeacherTurnUntil) {
+      classroomTeacherReturnQuaternion.copy(classroomTeacher.object.quaternion);
+      classroomTeacherReturning = true;
+      classroomTeacherReturnStartedAt = now;
+      classroomTeacherTurned = false;
+    }
+  } else if (now >= classroomTeacherNextTurnAt) {
+    turnClassroomTeacherTowardPlayer(now);
+  }
+
+  if (classroomTeacherTurned) {
+    const teacherWorldPosition = classroomTeacher.object.getWorldPosition(
+      new THREE.Vector3(),
+    );
+    const cameraToTeacher = teacherWorldPosition
+      .clone()
+      .sub(camera.position)
+      .normalize();
+    const playerForward = camera.getWorldDirection(new THREE.Vector3());
+    const teacherScreenPosition = teacherWorldPosition.clone().project(camera);
+    const teacherIsOnScreen =
+      teacherScreenPosition.z >= 0 &&
+      teacherScreenPosition.z <= 1 &&
+      Math.abs(teacherScreenPosition.x) <= 1 &&
+      Math.abs(teacherScreenPosition.y) <= 1;
+    const playerIsLookingAtTeacher =
+      teacherIsOnScreen &&
+      playerForward.dot(cameraToTeacher) >=
+        Math.cos(THREE.MathUtils.degToRad(35));
+    if (weaponDrawn || !classroomSeatActive || !playerIsLookingAtTeacher)
+      triggerClassroomDangerDeath(classroomTeacher, now);
+  }
+}
+
 function updateMatryoshkaMobs(now: number, delta: number): void {
-  if (_isInStore || _isInClassroom) {
+  if (_isInStore) {
+    parkingLotFearActive = false;
     fearActive = false;
     fearOverlay.classList.remove("is-visible");
+    updateHeartbeatPlaybackRate();
+    matryoshkaMobs.forEach((mob) => mob.velocity.set(0, 0, 0));
+    return;
+  }
+  if (_isInClassroom) {
+    updateClassroomBell(now);
+    updateClassroomTeacher(now);
     matryoshkaMobs.forEach((mob) => mob.velocity.set(0, 0, 0));
     return;
   }
@@ -2005,7 +2265,8 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
     startScreen.classList.contains("is-visible") ||
     settingsOverlay.classList.contains("is-open")
   ) {
-    fearActive = false;
+    parkingLotFearActive = false;
+    fearActive = parkingLotFearActive;
     fearOverlay.classList.remove("is-visible");
     updateHeartbeatPlaybackRate();
     matryoshkaMobs.forEach((mob) => {
@@ -2014,7 +2275,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
     return;
   }
   if (playerDeathActive) return;
-  fearActive = false;
+  parkingLotFearActive = false;
   for (const mob of matryoshkaMobs) {
     if (mob.classroomOnly) continue;
     if (mob.knockedDownAt > 0) syncMatryoshkaFromPhysics(mob);
@@ -2121,7 +2382,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
       nextState === "chase" ||
       (nextState === "investigate" && mob.soundSource === "player")
     )
-      fearActive = true;
+      parkingLotFearActive = true;
     const targetHorizontalDistanceSquared =
       getMatryoshkaHorizontalDistanceSquared(mob.target, matryoshkaMobPosition);
     if (targetHorizontalDistanceSquared < 4 && mob.route.length > 1) {
@@ -2177,6 +2438,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
       mob.pathRefreshAt = now + matryoshkaPathRefreshInterval;
     }
   }
+  fearActive = parkingLotFearActive;
   fearOverlay.classList.toggle("is-visible", fearActive);
   updateHeartbeatPlaybackRate();
 }
@@ -2307,7 +2569,13 @@ function spawnMatryoshkaMob(
         playerVisible: false,
       };
       matryoshkaMobs.push(mob);
-      if (!classroomOnly) chooseMatryoshkaTarget(mob);
+      if (classroomOnly) {
+        classroomTeacher = mob;
+        classroomTeacherTurned = false;
+        classroomTeacherNextTurnAt = -Infinity;
+        classroomTeacherTurnPendingAt = -Infinity;
+        classroomTeacherStudentTurnAt = -Infinity;
+      } else chooseMatryoshkaTarget(mob);
     })
     .catch((error: unknown) =>
       console.error("Failed to load Matryoshka mob.", error),
@@ -3710,12 +3978,17 @@ let weaponReloading = false;
 let weaponReloadStartedAt = -Infinity;
 let weaponReloadDuration = 1;
 let reloadSoundBuffer: AudioBuffer | null = null;
+let reloadSoundSource: AudioBufferSourceNode | null = null;
+let reloadGeneration = 0;
 let dryFireSoundBuffer: AudioBuffer | null = null;
 let heartbeatSoundBuffer: AudioBuffer | null = null;
 let heartbeatSoundSource: AudioBufferSourceNode | null = null;
 let heartbeatSoundGain: GainNode | null = null;
+let heartbeatStartPending = false;
 let heartbeatFearLoopStart = 0;
 let heartbeatFearLoopEnd = 0;
+const heartbeatNormalPlaybackRate = 1;
+const heartbeatFearPlaybackRate = 1.35;
 const gunshotSoundReady = fetch(pistolSoundUrl)
   .then((response) => response.arrayBuffer())
   .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
@@ -3813,6 +4086,19 @@ const chaseSoundReady = fetch(chaseSoundUrl)
   .catch((error: unknown) =>
     console.error("Chase audio failed to load.", error),
   );
+const classroomBellUrl = new URL(
+  "../assets/sounds/u_7t06dkcgzk-japanese-school-bell-sound-488954.mp3",
+  import.meta.url,
+).href;
+const classroomBellReady = fetch(classroomBellUrl)
+  .then((response) => response.arrayBuffer())
+  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+  .then((buffer) => {
+    classroomBellBuffer = buffer;
+  })
+  .catch((error: unknown) =>
+    console.error("Classroom bell audio failed to load.", error),
+  );
 const deathSoundUrl = new URL(
   "../assets/sounds/universfield-horror-impact-454854.mp3",
   import.meta.url,
@@ -3861,6 +4147,7 @@ const audioAssetsReady = Promise.all([
   reloadSoundReady,
   dryFireSoundReady,
   chaseSoundReady,
+  classroomBellReady,
   deathSoundReady,
   trueCarSoundReady,
   runningSoundReady,
@@ -3979,6 +4266,46 @@ function playChaseSound(): void {
   source.start();
 }
 
+function playClassroomBell(now: number): void {
+  if (
+    !_isInClassroom ||
+    gameplayPaused ||
+    classroomBellPlaying ||
+    !classroomBellBuffer
+  )
+    return;
+  const source = gunshotAudioContext.createBufferSource();
+  const gain = gunshotAudioContext.createGain();
+  source.buffer = classroomBellBuffer;
+  source.playbackRate.value = classroomBellPlaybackRate;
+  gain.gain.value = soundVolumeMultiplier;
+  source.connect(gain);
+  gain.connect(gunshotAudioContext.destination);
+  classroomBellSource = source;
+  classroomBellPlaying = true;
+  classroomTeacherTurnPendingAt = -Infinity;
+  source.onended = () => {
+    if (classroomBellSource !== source) return;
+    classroomBellSource = null;
+    classroomBellPlaying = false;
+    classroomBellNextAt = performance.now() / 1000 + classroomBellInterval;
+  };
+  source.start();
+}
+
+function updateClassroomBell(now: number): void {
+  if (!_isInClassroom || gameplayPaused || !controls.isLocked) return;
+  if (!Number.isFinite(classroomBellNextAt)) {
+    void classroomBellReady.then(() => playClassroomBell(now));
+    classroomBellNextAt = now;
+    return;
+  }
+  if (now >= classroomBellNextAt) {
+    void classroomBellReady.then(() => playClassroomBell(now));
+    classroomBellNextAt = Infinity;
+  }
+}
+
 function playDeathSound(): void {
   if (!deathSoundBuffer) return;
   const source = gunshotAudioContext.createBufferSource();
@@ -3998,7 +4325,13 @@ function playDeathSound(): void {
 }
 
 function startWeaponReload(): void {
-  if (weaponReloading || !weaponPickupCollected || trueCarEntered) return;
+  if (
+    weaponReloading ||
+    !weaponPickupCollected ||
+    !weaponDrawn ||
+    trueCarEntered
+  )
+    return;
   reloadPrompt.hidden = true;
   reloadPrompt.classList.remove("is-fading");
   if (reloadPromptFadeTimer !== null) {
@@ -4006,20 +4339,25 @@ function startWeaponReload(): void {
     reloadPromptFadeTimer = null;
   }
   weaponReloading = true;
+  const generation = ++reloadGeneration;
   setAiming(false);
   const beginReload = (): void => {
-    if (!reloadSoundBuffer) return;
+    if (!reloadSoundBuffer || !weaponReloading || generation !== reloadGeneration)
+      return;
     camera.getWorldPosition(cameraOrigin);
     alertMatryoshkasToSound(cameraOrigin);
     weaponReloadDuration = reloadSoundBuffer.duration;
     weaponReloadStartedAt = gunshotAudioContext.currentTime;
     const source = gunshotAudioContext.createBufferSource();
+    reloadSoundSource = source;
     const gain = gunshotAudioContext.createGain();
     source.buffer = reloadSoundBuffer;
     gain.gain.value = soundVolumeMultiplier;
     source.connect(gain);
     gain.connect(gunshotAudioContext.destination);
     source.onended = () => {
+      if (reloadSoundSource !== source || generation !== reloadGeneration) return;
+      reloadSoundSource = null;
       weaponAmmo = weaponMagazineSize;
       weaponReloading = false;
       weaponReloadStartedAt = -Infinity;
@@ -4039,6 +4377,24 @@ function startWeaponReload(): void {
       weaponReloading = false;
       console.error("Reload audio playback failed.", error);
     });
+}
+
+function cancelWeaponReload(): void {
+  reloadGeneration += 1;
+  if (reloadSoundSource) {
+    reloadSoundSource.onended = null;
+    reloadSoundSource.stop();
+    reloadSoundSource.disconnect();
+    reloadSoundSource = null;
+  }
+  weaponReloading = false;
+  weaponReloadStartedAt = -Infinity;
+  reloadPrompt.hidden = true;
+  reloadPrompt.classList.remove("is-fading");
+  if (reloadPromptFadeTimer !== null) {
+    window.clearTimeout(reloadPromptFadeTimer);
+    reloadPromptFadeTimer = null;
+  }
 }
 
 function playKnockSound(onEnded?: () => void): void {
@@ -4142,9 +4498,25 @@ function playCarBreakSound(): void {
 }
 
 function playHeartbeatSound(): void {
-  if (!heartbeatSoundBuffer || heartbeatSoundSource) return;
+  if (
+    !heartbeatSoundBuffer ||
+    heartbeatSoundSource ||
+    gameplayPaused ||
+    !controls.isLocked ||
+    document.hidden ||
+    settingsOverlay.classList.contains("is-open")
+  )
+    return;
   const startHeartbeat = (): void => {
-    if (!heartbeatSoundBuffer || heartbeatSoundSource) return;
+    if (
+      !heartbeatSoundBuffer ||
+      heartbeatSoundSource ||
+      gameplayPaused ||
+      !controls.isLocked ||
+      document.hidden ||
+      settingsOverlay.classList.contains("is-open")
+    )
+      return;
     const source = gunshotAudioContext.createBufferSource();
     const gain = gunshotAudioContext.createGain();
     source.buffer = heartbeatSoundBuffer;
@@ -4153,7 +4525,9 @@ function playHeartbeatSound(): void {
     source.loopEnd = fearActive
       ? heartbeatFearLoopEnd
       : heartbeatSoundBuffer.duration;
-    source.playbackRate.value = 1;
+    source.playbackRate.value = fearActive
+      ? heartbeatFearPlaybackRate
+      : heartbeatNormalPlaybackRate;
     gain.gain.value = soundVolumeMultiplier * 2;
     source.connect(gain);
     gain.connect(gunshotAudioContext.destination);
@@ -4180,6 +4554,9 @@ function updateHeartbeatPlaybackRate(): void {
   heartbeatSoundSource.loopEnd = fearActive
     ? heartbeatFearLoopEnd
     : (heartbeatSoundBuffer?.duration ?? heartbeatFearLoopEnd);
+  heartbeatSoundSource.playbackRate.value = fearActive
+    ? heartbeatFearPlaybackRate
+    : heartbeatNormalPlaybackRate;
 }
 
 function stopHeartbeatSound(): void {
@@ -4190,9 +4567,25 @@ function stopHeartbeatSound(): void {
   heartbeatSoundGain = null;
 }
 
+function ensureHeartbeatSound(): void {
+  if (heartbeatSoundSource || heartbeatStartPending || gameplayPaused) return;
+  heartbeatStartPending = true;
+  void heartbeatSoundReady.then(() => {
+    heartbeatStartPending = false;
+    playHeartbeatSound();
+  });
+}
+
 function warmGunshotAudio(): void {
   if (gunshotAudioContext.state === "suspended")
     void gunshotAudioContext.resume();
+}
+
+function resumeGameplayAudio(): void {
+  const restartHeartbeat = (): void => {
+    ensureHeartbeatSound();
+  };
+  void gunshotAudioContext.resume().then(restartHeartbeat);
 }
 
 function playRunningSound(): void {
@@ -4488,7 +4881,13 @@ function stopAutomaticFire(): void {
 
 document.addEventListener("pointerdown", handlePointerDown);
 document.addEventListener("mousedown", handleMouseDown);
-window.addEventListener("focus", warmGunshotAudio);
+window.addEventListener("focus", () => {
+  warmGunshotAudio();
+  if (controls.isLocked) {
+    gameplayPaused = false;
+    resumeGameplayAudio();
+  }
+});
 document.addEventListener("pointerup", (event) => {
   handlePointerUp(event);
   if (event.button === 0) {
@@ -4512,16 +4911,25 @@ window.addEventListener("mouseup", (event) => {
   }
 });
 window.addEventListener("blur", () => {
+  cancelClassroomBackDoorOpening();
+  gameplayPaused = true;
   _aimButtonHeld = false;
   leftButtonHeld = false;
   stopAutomaticFire();
   releaseAim();
+  stopHeartbeatSound();
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
+    cancelClassroomBackDoorOpening();
+    gameplayPaused = true;
     stopAutomaticFire();
     releaseAim();
-  } else warmGunshotAudio();
+    stopHeartbeatSound();
+  } else if (controls.isLocked) {
+    gameplayPaused = false;
+    resumeGameplayAudio();
+  }
 });
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 settingsSensitivity.addEventListener("input", () => {
@@ -4884,6 +5292,14 @@ const classroomFrontDirection = new THREE.Vector3(0, 0, 1);
 const classroomSeatLookAt = new THREE.Vector3();
 const classroomSeatInteractionDistance = 2;
 const classroomSeatInteractionAngle = 55;
+const classroomBackDoorHandlePosition = new THREE.Vector3(-7.666, 0.125, 5.587);
+const classroomBackDoorInteractionDistance = 2.0;
+const classroomBackDoorInteractionAngle = 45;
+let classroomBackDoorOpening = false;
+let classroomBackDoorOpened = false;
+let classroomBackDoorOpeningStartedAt = -Infinity;
+let classroomBackDoorOpeningTimer: number | null = null;
+const classroomBackDoorOpeningDuration = 3000;
 const classroomStudentLookDirection = new THREE.Vector3();
 const classroomStudentToPlayerDirection = new THREE.Vector3();
 const weaponPickupDistance = 4;
@@ -4929,10 +5345,15 @@ function updateKeyInteractionPrompt(): void {
     keyPickupPrompt.hidden = true;
     weaponPickupPrompt.hidden = !isWeaponWithinPickupRange();
     trueCarPrompt.hidden = true;
+    vehicleSearchHint.textContent = "PRESS [F] TO OPEN BACK DOOR";
+    vehicleSearchHint.hidden =
+      classroomBackDoorOpening || !isClassroomBackDoorWithinInteractionRange();
     classroomSeatPrompt.hidden =
       !weaponPickupCollected || !isClassroomSeatWithinInteractionRange();
-    vehicleSearchHint.textContent = "PRESS [F] TO STAND UP";
-    vehicleSearchHint.hidden = !classroomSeatActive;
+    if (classroomSeatActive) {
+      vehicleSearchHint.textContent = "PRESS [F] TO STAND UP";
+      vehicleSearchHint.hidden = false;
+    }
     return;
   }
   if (_isInStore) {
@@ -4948,6 +5369,35 @@ function updateKeyInteractionPrompt(): void {
   weaponPickupPrompt.hidden = !isWeaponWithinPickupRange();
   vehicleSearchHint.hidden = !keyPickupCollected;
   trueCarPrompt.hidden = !isTrueCarWithinInteractionRange();
+}
+
+function isClassroomBackDoorWithinInteractionRange(): boolean {
+  if (
+    !controls.isLocked ||
+    !_isInClassroom ||
+    classroomSeatActive ||
+    classroomBackDoorOpened
+  )
+    return false;
+  const horizontalDistance = Math.hypot(
+    camera.position.x - classroomBackDoorHandlePosition.x,
+    camera.position.z - classroomBackDoorHandlePosition.z,
+  );
+  if (horizontalDistance > classroomBackDoorInteractionDistance) return false;
+  const horizontalLookDirection = camera.getWorldDirection(
+    new THREE.Vector3(),
+  );
+  horizontalLookDirection.y = 0;
+  horizontalLookDirection.normalize();
+  keyPickupToPlayerDirection
+    .copy(classroomBackDoorHandlePosition)
+    .sub(camera.position);
+  keyPickupToPlayerDirection.y = 0;
+  keyPickupToPlayerDirection.normalize();
+  return (
+    horizontalLookDirection.dot(keyPickupToPlayerDirection) >=
+    Math.cos(THREE.MathUtils.degToRad(classroomBackDoorInteractionAngle))
+  );
 }
 
 function isClassroomSeatWithinInteractionRange(): boolean {
@@ -4972,6 +5422,7 @@ function isClassroomSeatWithinInteractionRange(): boolean {
 function sitAtClassroomSeat(force = false): void {
   if (!force && !isClassroomSeatWithinInteractionRange()) return;
   classroomStudents.forEach((student) => {
+    if (classroomDeadStudents.has(student)) return;
     const initialRotation = classroomStudentInitialRotations.get(student);
     if (initialRotation) {
       gsap.killTweensOf(student.rotation);
@@ -4979,6 +5430,8 @@ function sitAtClassroomSeat(force = false): void {
     }
   });
   classroomStudentKnockdownUntil.clear();
+  classroomStudentsAlerted = false;
+  classroomTeacherStudentTurnAt = -Infinity;
   classroomSeatLookAt.copy(classroomSeatPosition).add(classroomFrontDirection);
   camera.position.copy(classroomSeatPosition);
   camera.lookAt(classroomSeatLookAt);
@@ -4998,39 +5451,46 @@ function sitAtClassroomSeat(force = false): void {
 }
 
 function updateClassroomStudentsFacingPlayer(): void {
-  if (!_isInClassroom || classroomSeatActive) return;
+  if (!_isInClassroom) return;
+  if (!classroomSeatActive) {
+    alertClassroomStudents(performance.now() / 1000);
+  }
+  if (classroomSeatActive && !classroomStudentsAlerted)
+    return;
   classroomStudents.forEach((student) => {
-    if (classroomStudentKnockdownUntil.has(student)) return;
+    if (classroomDeadStudents.has(student)) return;
     student.lookAt(camera.position.x, student.position.y, camera.position.z);
   });
 }
 
-function knockDownClassroomStudent(student: THREE.Object3D, now: number): void {
-  const knockdownUntil = now + 3;
-  classroomStudentKnockdownUntil.set(student, knockdownUntil);
+function knockDownClassroomStudent(
+  student: THREE.Object3D,
+  now: number,
+  impactDirection?: THREE.Vector3,
+): void {
+  if (classroomDeadStudents.has(student)) return;
+  classroomDeadStudents.add(student);
+  classroomStudentKnockdownUntil.set(student, Infinity);
+  alertClassroomStudents(now);
   gsap.killTweensOf(student.rotation);
-  gsap.to(student.rotation, {
-    x: -Math.PI / 2,
+  gsap.killTweensOf(student.quaternion);
+  const direction =
+    impactDirection?.clone().normalize() ?? new THREE.Vector3(0, 0, 1);
+  direction.y = 0;
+  direction.normalize();
+  const fallAxis = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+  const fallQuaternion = new THREE.Quaternion().setFromAxisAngle(
+    fallAxis,
+    Math.PI / 2,
+  );
+  const targetQuaternion = student.quaternion.clone().premultiply(fallQuaternion);
+  gsap.to(student.quaternion, {
+    x: targetQuaternion.x,
+    y: targetQuaternion.y,
+    z: targetQuaternion.z,
+    w: targetQuaternion.w,
     duration: 0.18,
     ease: "power2.out",
-    onComplete: () => {
-      window.setTimeout(
-        () => {
-          const initialRotation = classroomStudentInitialRotations.get(student);
-          if (!initialRotation) return;
-          classroomStudentKnockdownUntil.delete(student);
-          gsap.to(student.quaternion, {
-            x: initialRotation.x,
-            y: initialRotation.y,
-            z: initialRotation.z,
-            w: initialRotation.w,
-            duration: 0.25,
-            ease: "power2.out",
-          });
-        },
-        Math.max(0, (knockdownUntil - performance.now() / 1000) * 1000),
-      );
-    },
   });
 }
 
@@ -5040,8 +5500,9 @@ function updateClassroomFearState(): void {
     classroomSeatActive ||
     classroomStudents.length === 0
   ) {
-    if (fearActive && (_isInClassroom || classroomSeatActive)) {
-      fearActive = false;
+    if (_isInClassroom || classroomSeatActive) {
+      classroomFearActive = false;
+      fearActive = classroomFearActive;
       fearOverlay.classList.remove("is-visible");
       updateHeartbeatPlaybackRate();
     }
@@ -5064,7 +5525,8 @@ function updateClassroomFearState(): void {
         .dot(classroomStudentToPlayerDirection) >= 0.92
     );
   });
-  fearActive = allStudentsWatching;
+  classroomFearActive = allStudentsWatching;
+  fearActive = classroomFearActive;
   fearOverlay.classList.toggle("is-visible", fearActive);
   updateHeartbeatPlaybackRate();
 }
@@ -5132,6 +5594,7 @@ function setWeaponDrawn(drawn: boolean): void {
     });
   } else {
     if (weaponHolstering || !weaponDrawn) return;
+    if (weaponReloading) cancelWeaponReload();
     weaponHolstering = true;
     weaponRaising = false;
     setAiming(false);
@@ -5338,6 +5801,59 @@ function enterTrueCar(): void {
   window.setTimeout(finishTrueCarEnding, 10000);
 }
 
+function openClassroomBackDoor(): void {
+  if (classroomBackDoorOpening || !isClassroomBackDoorWithinInteractionRange())
+    return;
+  classroomBackDoorOpening = true;
+  classroomBackDoorOpeningStartedAt = performance.now();
+  classroomDoorProgressRing.hidden = false;
+  classroomDoorProgressFill.style.strokeDashoffset = `${classroomDoorProgressCircumference}`;
+  updateKeyInteractionPrompt();
+  classroomBackDoorOpeningTimer = window.setTimeout(() => {
+    if (!_isInClassroom || !classroomBackDoorOpening) return;
+    classroomBackDoorOpeningTimer = null;
+    classroomBackDoorOpening = false;
+    classroomBackDoorOpened = true;
+    classroomDoorProgressRing.hidden = true;
+    classroomBackDoorOpeningStartedAt = -Infinity;
+    episodeFadeOverlay.classList.add("is-complete");
+    void deathSoundReady.then(playDeathSound);
+    window.setTimeout(() => {
+      void chaseSoundReady.then(playChaseSound);
+    }, 500);
+    window.setTimeout(returnToHome, 3000);
+  }, classroomBackDoorOpeningDuration);
+}
+
+function cancelClassroomBackDoorOpening(): void {
+  if (!classroomBackDoorOpening) return;
+  classroomBackDoorOpening = false;
+  classroomBackDoorOpeningStartedAt = -Infinity;
+  classroomDoorProgressRing.hidden = true;
+  classroomDoorProgressFill.style.strokeDashoffset = `${classroomDoorProgressCircumference}`;
+  if (classroomBackDoorOpeningTimer !== null) {
+    window.clearTimeout(classroomBackDoorOpeningTimer);
+    classroomBackDoorOpeningTimer = null;
+  }
+}
+
+function updateClassroomBackDoorProgress(): void {
+  if (!classroomBackDoorOpening) return;
+  if (!isClassroomBackDoorWithinInteractionRange()) {
+    cancelClassroomBackDoorOpening();
+    return;
+  }
+  const progress = THREE.MathUtils.clamp(
+    (performance.now() - classroomBackDoorOpeningStartedAt) /
+      classroomBackDoorOpeningDuration,
+    0,
+    1,
+  );
+  classroomDoorProgressFill.style.strokeDashoffset = `${
+    classroomDoorProgressCircumference * (1 - progress)
+  }`;
+}
+
 function updateTrueCarSeatPosition(): void {
   if (!trueCarEntered || !trueCar) return;
   trueCar.getWorldQuaternion(trueCarWorldQuaternion);
@@ -5460,6 +5976,8 @@ function handleKeyDown(event: KeyboardEvent): void {
   if (event.code === "KeyF") {
     if (isWeaponWithinPickupRange()) {
       collectWeaponPickup();
+    } else if (isClassroomBackDoorWithinInteractionRange()) {
+      openClassroomBackDoor();
     } else if (classroomSeatActive && _isInClassroom) {
       classroomSeatActive = false;
       classroomSeatExitCameraPosition.copy(classroomSeatExitPosition);
@@ -5512,7 +6030,9 @@ function handleKeyUp(event: KeyboardEvent): void {
 
 function handleLockChange(): void {
   const locked = controls.isLocked;
+  gameplayPaused = !locked;
   if (!locked) releaseAim();
+  if (locked) resumeGameplayAudio();
   range.classList.toggle("is-locked", locked);
   syncPauseMenu();
 }
@@ -5548,6 +6068,8 @@ function showMenuView(view: "home" | "mode" | "settings"): void {
 
 function openMenu(): void {
   if (playerDeathActive) return;
+  cancelClassroomBackDoorOpening();
+  gameplayPaused = true;
   if (controls.isLocked) controls.unlock();
   if (gunshotAudioContext.state === "running")
     void gunshotAudioContext.suspend();
@@ -5560,8 +6082,8 @@ function syncPauseMenu(): void {
     settingsOverlay.classList.remove("is-open");
     return;
   }
-  const isPointerLockedToGameCanvas = document.pointerLockElement === canvas;
-  const shouldShowPauseMenu = !isPointerLockedToGameCanvas;
+  const shouldShowPauseMenu = !controls.isLocked;
+  gameplayPaused = shouldShowPauseMenu || document.hidden;
   if (shouldShowPauseMenu) showMenuView("home");
   if (shouldShowPauseMenu) {
     if (gunshotAudioContext.state === "running")
@@ -5615,6 +6137,9 @@ const enterEpisode = createEpisodeEntryController({
   setEpisodeFlags: (episodeId) => {
     _isInStore = episodeId === "store";
     _isInClassroom = episodeId === "classroom";
+    parkingLotFearActive = false;
+    classroomFearActive = false;
+    fearActive = false;
     classroomSeatActive = false;
   },
   syncEpisodeOnlyObjects,
@@ -6652,7 +7177,11 @@ function updateProjectiles(now: number, delta: number): void {
         impactNormal,
         projectileTravel.normalize(),
       );
-      knockDownClassroomStudent(classroomStudentHit.student, now);
+      knockDownClassroomStudent(
+        classroomStudentHit.student,
+        now,
+        projectileTravel,
+      );
     } else if (
       matryoshkaHit &&
       (!parkingSurfaceHit ||
@@ -6940,6 +7469,7 @@ resizeRenderer();
 const clock = new THREE.Clock();
 let weaponSwayFactor = 0;
 let movementBobPhase = 0;
+let wasRunning = false;
 let cameraBobOffset = 0;
 const cameraBobAxis = new THREE.Vector3(0, 0, 1);
 const cameraBobQuaternion = new THREE.Quaternion();
@@ -6958,6 +7488,7 @@ function render(): void {
   camera.position.y -= cameraBobOffset;
   cameraBobOffset = 0;
   if (
+    (gameplayPaused && !playerDeathActive) ||
     startScreen.classList.contains("is-visible") ||
     episodeScreen.classList.contains("is-visible") ||
     settingsOverlay.classList.contains("is-open") ||
@@ -6966,6 +7497,8 @@ function render(): void {
   ) {
     return;
   }
+  ensureHeartbeatSound();
+  updateClassroomBackDoorProgress();
   updateProjectiles(performance.now() / 1000, delta);
   updateMatryoshkaMobs(performance.now() / 1000, delta);
   if (playerDeathActive) {
@@ -7058,6 +7591,8 @@ function render(): void {
     !weaponReloading &&
     (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
     playerSprintActive;
+  if (isRunning && !wasRunning) movementBobPhase = 0;
+  wasRunning = isRunning;
   if (isRunning) {
     playRunningSound();
     if (elapsed - lastFootstepSoundAt >= 0.18) {
