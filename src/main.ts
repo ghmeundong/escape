@@ -4,10 +4,7 @@ import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import {
-  getStoredEpisodeId,
-  type EpisodeId,
-} from "./game/episodes";
+import { getStoredEpisodeId, type EpisodeId } from "./game/episodes";
 import { startEpisode, restoreEpisodeVisibility } from "./game/episodeFlow";
 import {
   bindSettingsPersistence,
@@ -101,7 +98,8 @@ const startScreen = document.querySelector<HTMLElement>(".start-screen")!;
 const loadingScreen = document.querySelector<HTMLElement>(".loading-screen")!;
 const loadingTitle = document.querySelector<HTMLElement>("#loading-title")!;
 const loadingStatus = document.querySelector<HTMLElement>("#loading-status")!;
-const loadingBarFill = document.querySelector<HTMLElement>("#loading-bar-fill")!;
+const loadingBarFill =
+  document.querySelector<HTMLElement>("#loading-bar-fill")!;
 const startPlayButton =
   document.querySelector<HTMLButtonElement>("#start-play-button")!;
 const episodeScreen = document.querySelector<HTMLElement>(".episode-screen")!;
@@ -148,7 +146,8 @@ staminaHud.innerHTML = `
   <div class="stamina-bar"><span id="stamina-bar-fill"></span></div>
 `;
 range.append(staminaHud);
-const staminaBarFill = document.querySelector<HTMLElement>("#stamina-bar-fill")!;
+const staminaBarFill =
+  document.querySelector<HTMLElement>("#stamina-bar-fill")!;
 const weaponPickupPrompt = document.createElement("div");
 weaponPickupPrompt.className = "interaction-prompt";
 weaponPickupPrompt.textContent = "PRESS [F] TO PICK UP PISTOL";
@@ -774,6 +773,9 @@ let parkingLotRoot: THREE.Object3D | null = null;
 let storeRoot: THREE.Object3D | null = null;
 let storeBounds: THREE.Box3 | null = null;
 let _isInStore = false;
+const storeLightRig = new THREE.Group();
+storeLightRig.visible = false;
+scene.add(storeLightRig);
 const parkingObstacles: THREE.Box3[] = [];
 const matryoshkaObstacles: THREE.Box3[] = [];
 const matryoshkaVehicleObstacles: THREE.Box3[] = [];
@@ -1012,7 +1014,10 @@ function updatePlayerStamina(delta: number): void {
     );
   } else if (canSprint) {
     playerSprintActive = true;
-    playerStamina = Math.max(0, playerStamina - playerStaminaDrainPerSecond * delta);
+    playerStamina = Math.max(
+      0,
+      playerStamina - playerStaminaDrainPerSecond * delta,
+    );
     if (playerStamina <= 0.01) {
       playerSprintActive = false;
     }
@@ -1024,7 +1029,10 @@ function updatePlayerStamina(delta: number): void {
     );
   }
 
-  const staminaRatio = Math.max(0, Math.min(1, playerStamina / playerMaxStamina));
+  const staminaRatio = Math.max(
+    0,
+    Math.min(1, playerStamina / playerMaxStamina),
+  );
   const isLowStamina = staminaRatio < playerSprintThresholdRatio;
   staminaBarFill.style.width = `${staminaRatio * 100}%`;
   staminaBarFill.style.opacity = "1";
@@ -1134,6 +1142,7 @@ function restartCurrentEpisode(): void {
     heartbeatSoundReady,
     playHeartbeatSound,
   });
+  syncEpisodeOnlyObjects();
 }
 
 deathRetryButton.addEventListener("click", restartCurrentEpisode);
@@ -2045,6 +2054,11 @@ function recoverMatryoshkaMob(mob: MatryoshkaMob): void {
 }
 
 function updateMatryoshkaMobs(now: number, delta: number): void {
+  if (_isInStore) {
+    fearActive = false;
+    fearOverlay.classList.remove("is-visible");
+    return;
+  }
   if (!parkingLotRoot || matryoshkaWaypoints.length === 0) return;
   if (
     startScreen.classList.contains("is-visible") ||
@@ -2074,9 +2088,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
         .copy(mob.hitboxBounds)
         .applyMatrix4(mob.object.matrixWorld);
       matryoshkaFullMobBounds.getCenter(matryoshkaBoundsCenter);
-      matryoshkaFullMobBounds
-        .getSize(matryoshkaBoundsSize)
-        .multiplyScalar(0.7);
+      matryoshkaFullMobBounds.getSize(matryoshkaBoundsSize).multiplyScalar(0.7);
       mob.hitboxHelper.box.setFromCenterAndSize(
         matryoshkaBoundsCenter,
         matryoshkaBoundsSize,
@@ -2101,7 +2113,8 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
     const playerInRedRange = distanceToPlayer <= matryoshkaDetectionRange;
     if (now >= mob.visibilityCheckAt) {
       mob.playerVisible =
-        playerInRedRange || matryoshkaHasLineOfSight(mob.object, camera.position);
+        playerInRedRange ||
+        matryoshkaHasLineOfSight(mob.object, camera.position);
       mob.visibilityCheckAt = now + 0.1;
     }
     const playerVisible = playerInRedRange || mob.playerVisible;
@@ -3126,48 +3139,54 @@ parkingLotLoader.load(
     }
 
     showLoadingScreen("LOADING OBJECTS...", 54);
-    const storeLoader = new FBXLoader();
-    const storeUrl = new URL("./assets/store/empty-store.fbx", import.meta.url)
+    const storeLoader = new GLTFLoader();
+    const storeUrl = new URL("./assets/store/empty-store.glb", import.meta.url)
       .href;
     storeLoader.load(
       storeUrl,
-      (store) => {
+      (gltf) => {
+        const store = gltf.scene;
         store.updateMatrixWorld(true);
         const storeBoundsBox = new THREE.Box3().setFromObject(store);
         const storeSize = storeBoundsBox.getSize(new THREE.Vector3());
-        const storeScale = 18 / Math.max(storeSize.x, storeSize.z, 1);
+        const storeScale = 500 / Math.max(storeSize.x, storeSize.z, 1);
         store.scale.setScalar(storeScale);
         store.updateMatrixWorld(true);
 
         const scaledStoreBounds = new THREE.Box3().setFromObject(store);
         const storeCenter = scaledStoreBounds.getCenter(new THREE.Vector3());
-        const parkingCenterZ =
-          (parkingBounds!.min.z + parkingBounds!.max.z) / 2;
-
-        store.position.x = parkingBounds!.max.x + 20 - storeCenter.x;
-        store.position.z = parkingCenterZ - storeCenter.z;
+        store.position.x = -storeCenter.x;
+        store.position.z = -storeCenter.z;
         store.position.y -= scaledStoreBounds.min.y;
         store.updateMatrixWorld(true);
 
-        store.traverse((object) => {
-          if (object instanceof THREE.Light) {
-            object.visible = false;
-          }
-          if (object instanceof THREE.Mesh) {
-            object.castShadow = false;
-            object.receiveShadow = false;
-          }
-        });
-
         storeRoot = store;
         storeBounds = new THREE.Box3().setFromObject(store);
-        storeSpawnPosition.copy(storeBounds.getCenter(new THREE.Vector3()));
-        storeSpawnPosition.y = playerHeight;
+        const storeFloorY = storeBounds.min.y;
+        const storeWorldCenter = storeBounds.getCenter(new THREE.Vector3());
+        storeSpawnPosition.set(
+          storeWorldCenter.x,
+          storeFloorY + playerHeight,
+          storeWorldCenter.z,
+        );
         const storeEntrySize = storeBounds.getSize(new THREE.Vector3());
         storeEntryPosition.set(
           storeBounds.min.x + Math.min(1.2, storeEntrySize.x * 0.12),
-          playerHeight,
+          storeFloorY + playerHeight,
           (storeBounds.min.z + storeBounds.max.z) * 0.5,
+        );
+        const storeHemisphereLight = new THREE.HemisphereLight(
+          "#f2f5ff",
+          "#1b2028",
+          1.4,
+        );
+        const storeKeyLight = new THREE.DirectionalLight("#fff8e8", 2.2);
+        storeKeyLight.position.set(-120, 240, 150);
+        storeKeyLight.target.position.set(0, 0, 0);
+        storeLightRig.add(
+          storeHemisphereLight,
+          storeKeyLight,
+          storeKeyLight.target,
         );
         store.visible = false;
 
@@ -3280,12 +3299,13 @@ parkingLotLoader.load(
             };
             placeKeyWhenReady();
             showLoadingScreen("LOADING OBJECTS...", 90);
-            void Promise.allSettled([audioAssetsReady, matryoshkaModelReady]).then(
-              () => {
+            void Promise.allSettled([
+              audioAssetsReady,
+              matryoshkaModelReady,
+            ]).then(() => {
               showLoadingScreen("LOADING OBJECTS...", 100);
               _hideLoadingScreen();
-              },
-            );
+            });
           },
           undefined,
           (error) => {
@@ -4312,7 +4332,10 @@ function getActiveAdsFov(): number {
 }
 
 function setAiming(nextAiming: boolean): void {
-  if (nextAiming && (!controls.isLocked || !weaponPickupCollected || trueCarEntered))
+  if (
+    nextAiming &&
+    (!controls.isLocked || !weaponPickupCollected || trueCarEntered)
+  )
     return;
   aiming = nextAiming;
   updatePointerSensitivity();
@@ -4835,6 +4858,13 @@ function isKeyWithinPickupRange(): boolean {
 }
 
 function updateKeyInteractionPrompt(): void {
+  if (_isInStore) {
+    keyPickupPrompt.hidden = true;
+    weaponPickupPrompt.hidden = true;
+    vehicleSearchHint.hidden = true;
+    trueCarPrompt.hidden = true;
+    return;
+  }
   keyPickupPrompt.hidden = !isKeyWithinPickupRange();
   weaponPickupPrompt.hidden = !isWeaponWithinPickupRange();
   vehicleSearchHint.hidden = !keyPickupCollected;
@@ -5210,6 +5240,23 @@ function closeMenu(): void {
   screenFlow.closeMenu();
 }
 
+function syncEpisodeOnlyObjects(): void {
+  const parkingObjectsVisible = !_isInStore;
+  storeLightRig.visible = _isInStore;
+  if (keyPickupObject)
+    keyPickupObject.visible = parkingObjectsVisible && !keyPickupCollected;
+  if (weaponPickupObject)
+    weaponPickupObject.visible =
+      parkingObjectsVisible && !weaponPickupCollected;
+  matryoshkaMobs.forEach((mob) => {
+    mob.object.visible = parkingObjectsVisible;
+    mob.visionIndicator.visible =
+      parkingObjectsVisible && matryoshkaVisionSetting.checked;
+    mob.hitboxHelper.visible =
+      parkingObjectsVisible && matryoshkaHitboxSetting.checked;
+  });
+}
+
 function finishEpisodeEntryLoading(): void {
   requestAnimationFrame(() => {
     showLoadingScreen("LOADING OBJECTS...", 60);
@@ -5228,25 +5275,36 @@ function enterEpisode(episodeId: EpisodeId): void {
   if (episodeEntryLoading) return;
   episodeEntryLoading = true;
   gameplayStarted = true;
-  showLoadingScreen("LOADING OBJECTS...", 15);
+  const loadingLabel =
+    episodeId === "store" ? "LOADING STORE..." : "LOADING PARKING LOT...";
+  showLoadingScreen(loadingLabel, 15);
   range.classList.add("is-enter-loading");
   startScreen.classList.remove("is-visible");
   episodeScreen.classList.remove("is-visible");
   _isInStore = episodeId === "store";
-  startEpisode(episodeId, {
-    parkingLotRoot,
-    storeRoot,
-    parkedCars,
-    camera,
-    storeSpawnPosition,
-    storeEntryPosition,
-    closeMenu,
-    lockPointer,
-    gunshotAudioContext,
-    heartbeatSoundReady,
-    playHeartbeatSound,
-  });
-  finishEpisodeEntryLoading();
+  const beginEpisode = (): void => {
+    if (episodeId === "store" && !storeRoot) {
+      showLoadingScreen(loadingLabel, 80);
+      requestAnimationFrame(beginEpisode);
+      return;
+    }
+    startEpisode(episodeId, {
+      parkingLotRoot,
+      storeRoot,
+      parkedCars,
+      camera,
+      storeSpawnPosition,
+      storeEntryPosition,
+      closeMenu,
+      lockPointer,
+      gunshotAudioContext,
+      heartbeatSoundReady,
+      playHeartbeatSound,
+    });
+    syncEpisodeOnlyObjects();
+    finishEpisodeEntryLoading();
+  };
+  beginEpisode();
 }
 
 function enterGame(): void {
@@ -5316,7 +5374,7 @@ const renderer = new THREE.WebGLRenderer({
   powerPreference: "high-performance",
 });
 renderer.setPixelRatio(getRenderPixelRatio());
-renderer.shadowMap.enabled = false;
+renderer.shadowMap.enabled = true;
 
 const parkingPreviewScene = new THREE.Scene();
 parkingPreviewScene.background = new THREE.Color("#10171a");
@@ -5591,23 +5649,25 @@ function updateInfiniteFloor(): void {
 }
 
 function resolveParkingCollision(): void {
-  if (!parkingBounds) return;
+  const activeBounds = _isInStore ? storeBounds : parkingBounds;
+  const activeRoot = _isInStore ? storeRoot : parkingLotRoot;
+  if (!activeBounds || !activeRoot) return;
   if (trueCarEntered) return;
   isGrounded = false;
   const playerRadius = 0.42;
   camera.position.x = THREE.MathUtils.clamp(
     camera.position.x,
-    parkingBounds.min.x + playerRadius,
-    parkingBounds.max.x - playerRadius,
+    activeBounds.min.x + playerRadius,
+    activeBounds.max.x - playerRadius,
   );
   camera.position.z = THREE.MathUtils.clamp(
     camera.position.z,
-    parkingBounds.min.z + playerRadius,
-    parkingBounds.max.z - playerRadius,
+    activeBounds.min.z + playerRadius,
+    activeBounds.max.z - playerRadius,
   );
 
   let hasGround = false;
-  if (parkingLotRoot && verticalVelocity <= 0) {
+  if (verticalVelocity <= 0) {
     parkingGroundRaycaster.set(
       new THREE.Vector3(
         camera.position.x,
@@ -5617,7 +5677,7 @@ function resolveParkingCollision(): void {
       new THREE.Vector3(0, -1, 0),
     );
     const groundHit = parkingGroundRaycaster
-      .intersectObject(parkingLotRoot, true)
+      .intersectObject(activeRoot, true)
       .find((intersection) => intersection.point.y <= camera.position.y + 0.7);
     if (groundHit) {
       const groundCameraHeight = groundHit.point.y + playerHeight;
@@ -5635,6 +5695,20 @@ function resolveParkingCollision(): void {
   if (
     !hasGround &&
     verticalVelocity < 0 &&
+    _isInStore &&
+    camera.position.y < activeBounds.min.y + playerHeight &&
+    activeBounds.min.y + playerHeight <= camera.position.y + 0.3
+  ) {
+    camera.position.y = activeBounds.min.y + playerHeight;
+    verticalVelocity = 0;
+    isGrounded = true;
+    lastSafePlayerPosition.copy(camera.position);
+    hasSafePlayerPosition = true;
+    hasGround = true;
+  }
+  if (
+    !hasGround &&
+    verticalVelocity < 0 &&
     camera.position.y < playerHeight - 0.2 &&
     hasSafePlayerPosition
   ) {
@@ -5646,7 +5720,7 @@ function resolveParkingCollision(): void {
     camera.position.y - 0.8,
     camera.position.y + 0.8,
   );
-  const nearbyObstacles = getNearbyParkingObstacles();
+  const nearbyObstacles = _isInStore ? [] : getNearbyParkingObstacles();
   for (const obstacle of nearbyObstacles) {
     if (
       playerHeightBounds.x >= obstacle.max.y ||
@@ -5682,11 +5756,17 @@ function movePlayerWithCollision(distance: THREE.Vector3): void {
   for (let stepIndex = 0; stepIndex < stepCount; stepIndex += 1) {
     const rightStep = new THREE.Vector3(step.x, 0, 0);
     const forwardStep = new THREE.Vector3(0, 0, step.z);
-    if (!parkingLotRoot || !isParkingWallAhead(rightStep)) {
+    if (
+      !(_isInStore ? storeRoot : parkingLotRoot) ||
+      !isParkingWallAhead(rightStep)
+    ) {
       controls.moveRight(rightStep.x);
       resolveParkingCollision();
     }
-    if (!parkingLotRoot || !isParkingWallAhead(forwardStep)) {
+    if (
+      !(_isInStore ? storeRoot : parkingLotRoot) ||
+      !isParkingWallAhead(forwardStep)
+    ) {
       controls.moveForward(forwardStep.z);
       resolveParkingCollision();
     }
@@ -5694,7 +5774,8 @@ function movePlayerWithCollision(distance: THREE.Vector3): void {
 }
 
 function isParkingWallAhead(step: THREE.Vector3): boolean {
-  if (!parkingLotRoot) return false;
+  const activeRoot = _isInStore ? storeRoot : parkingLotRoot;
+  if (!activeRoot) return false;
   const cameraForward = new THREE.Vector3();
   const cameraRight = new THREE.Vector3();
   camera.getWorldDirection(cameraForward);
@@ -5720,7 +5801,7 @@ function isParkingWallAhead(step: THREE.Vector3): boolean {
       horizontalStep,
     );
     parkingWallRaycaster.far = distance + 0.42;
-    const hit = parkingWallRaycaster.intersectObject(parkingLotRoot, true)[0];
+    const hit = parkingWallRaycaster.intersectObject(activeRoot, true)[0];
     if (hit && hit.distance <= distance + 0.18) return true;
   }
   return false;
