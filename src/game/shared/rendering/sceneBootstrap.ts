@@ -6,13 +6,13 @@ export function setupEpisodePreviewScenes(params: {
   parkingPreviewCanvas: HTMLCanvasElement;
   classroomEpisodeButton: HTMLButtonElement;
   classroomPreviewCanvas: HTMLCanvasElement;
-  storeEpisodeButton: HTMLButtonElement;
-  storePreviewCanvas: HTMLCanvasElement;
+  chessEpisodeButton: HTMLButtonElement;
+  chessPreviewCanvas: HTMLCanvasElement;
   parkingLotRoot: () => THREE.Object3D | null;
   parkedCars: () => THREE.Object3D[];
   classroomRoot: () => THREE.Object3D | null;
   classroomStudents: () => THREE.Object3D[];
-  storeRoot: () => THREE.Object3D | null;
+  chessRoot: () => THREE.Object3D | null;
 }): void {
   const parkingScene = new THREE.Scene();
   parkingScene.background = new THREE.Color("#10171a");
@@ -82,7 +82,7 @@ export function setupEpisodePreviewScenes(params: {
   classroomLight.position.set(-8, 12, 8);
   classroomScene.add(classroomLight);
   const classroomCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-  classroomCamera.position.set(7.2, 5.6, 7.2);
+  classroomCamera.position.set(4.8, 4.8, 4.8);
   classroomCamera.lookAt(0, 2, 0);
 
   const classroomRenderer = new THREE.WebGLRenderer({
@@ -125,6 +125,7 @@ export function setupEpisodePreviewScenes(params: {
           object.visible = true;
         });
         classroomGroup.add(clone);
+        classroomCamera.lookAt(0, 1.8, 0);
         classroomReady = true;
       }
     }
@@ -147,58 +148,78 @@ export function setupEpisodePreviewScenes(params: {
     classroomRenderer.render(classroomScene, classroomCamera);
   });
 
-  const storeScene = new THREE.Scene();
-  storeScene.background = new THREE.Color("#10171a");
-  storeScene.add(new THREE.HemisphereLight("#dce6e2", "#111619", 2.4));
-  const storeLight = new THREE.DirectionalLight("#fff3d4", 3.5);
-  storeLight.position.set(-5, 9, 7);
-  storeScene.add(storeLight);
-  const storeCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-  storeCamera.position.set(7, 6, 7);
-  storeCamera.lookAt(0, 2, 0);
+  const chessScene = new THREE.Scene();
+  chessScene.background = new THREE.Color("#10171a");
+  chessScene.add(new THREE.HemisphereLight("#f1e8d4", "#15110d", 2.4));
+  const chessLight = new THREE.DirectionalLight("#fff1cf", 3.5);
+  chessLight.position.set(-5, 9, 7);
+  chessScene.add(chessLight);
+  const chessCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 1000);
+  chessCamera.position.set(7, 6, 7);
+  chessCamera.lookAt(0, 2, 0);
 
-  const storeRenderer = new THREE.WebGLRenderer({
-    canvas: params.storePreviewCanvas,
+  const chessRenderer = new THREE.WebGLRenderer({
+    canvas: params.chessPreviewCanvas,
     antialias: true,
     alpha: false,
   });
-  storeRenderer.setPixelRatio(1);
-  const storeGroup = new THREE.Group();
-  storeScene.add(storeGroup);
+  chessRenderer.setPixelRatio(1);
+  const chessGroup = new THREE.Group();
+  chessScene.add(chessGroup);
 
-  let storeReady = false;
-  let lastStoreFrameAt = 0;
-  storeRenderer.setAnimationLoop(() => {
+  let chessReady = false;
+  let lastChessFrameAt = 0;
+  chessRenderer.setAnimationLoop(() => {
     if (!params.episodeScreen.classList.contains("is-visible")) return;
     const now = performance.now();
-    const interval = params.storeEpisodeButton.matches(":hover") ? 16 : 100;
-    if (now - lastStoreFrameAt < interval) return;
-    lastStoreFrameAt = now;
+    const interval = params.chessEpisodeButton.matches(":hover") ? 16 : 100;
+    if (now - lastChessFrameAt < interval) return;
+    lastChessFrameAt = now;
 
-    const width = params.storePreviewCanvas.clientWidth;
-    const height = params.storePreviewCanvas.clientHeight;
+    const width = params.chessPreviewCanvas.clientWidth;
+    const height = params.chessPreviewCanvas.clientHeight;
     if (!width || !height) return;
 
-    storeRenderer.setSize(
+    chessRenderer.setSize(
       Math.max(160, Math.floor(width * 0.75)),
       Math.max(160, Math.floor(height * 0.75)),
       false,
     );
-    storeCamera.aspect = width / height;
-    storeCamera.updateProjectionMatrix();
+    chessCamera.aspect = width / height;
+    chessCamera.updateProjectionMatrix();
 
-    if (!storeReady) {
-      const root = params.storeRoot();
+    if (!chessReady) {
+      const root = params.chessRoot();
       if (root) {
         const clone = root.clone(true);
+        clone.visible = true;
+        clone.traverse((object) => {
+          object.visible = true;
+        });
         clone.position.set(0, 0, 0);
-        storeGroup.add(clone);
-        storeReady = true;
+        chessGroup.add(clone);
+        const bounds = new THREE.Box3().setFromObject(clone);
+        const center = bounds.getCenter(new THREE.Vector3());
+        const size = bounds.getSize(new THREE.Vector3());
+        const radius = size.length() * 0.5;
+        const distance =
+          (radius / Math.tan(THREE.MathUtils.degToRad(19))) * 0.05;
+        chessCamera.position.copy(center).add(
+          new THREE.Vector3(0.72, -5, 0.72)
+            .normalize()
+            .multiplyScalar(distance),
+        );
+        const previewTarget = center.clone();
+        previewTarget.y -= radius * 0.20;
+        chessCamera.lookAt(previewTarget);
+        chessCamera.far = Math.max(1000, distance * 3);
+        chessCamera.updateProjectionMatrix();
+        chessReady = true;
       }
     }
 
-    storeGroup.rotation.y += 0.0015;
-    storeRenderer.render(storeScene, storeCamera);
+    chessGroup.rotation.y += 0.0015;
+    chessRenderer.render(chessScene, chessCamera);
   });
 }
 

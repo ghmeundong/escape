@@ -31,7 +31,7 @@ import {
   getRouteDistance,
 } from "./maps/parkingLot/matryoshkaNavigation";
 import { prepareParkingLotScene } from "./maps/parkingLot/parkingLotScene";
-import { prepareStoreScene } from "./maps/store/storeScene";
+import { prepareChessScene } from "./maps/chess/chessScene";
 import { prepareClassroomScene } from "./maps/classroom/classroomScene";
 import { placeClassroomStudents } from "./maps/classroom/classroomStudents";
 import { findClassroomTeacherClonePosition } from "./maps/classroom/classroomTeacherClonePlacement";
@@ -69,7 +69,7 @@ app.innerHTML = `
         </div>
       </section>
       <section class="episode-screen" aria-label="Episode selection">
-        <div class="episode-screen-content"><p>EPISODE SELECT</p><h1>ESCAPE</h1><div class="episode-card-grid"><div class="episode-card-shell"><button class="episode-card" id="parking-lot-episode-button" type="button"><canvas class="episode-card-preview" id="parking-preview-canvas" aria-label="Parking lot 3D preview"></canvas></button><strong>PARKING LOT</strong></div><div class="episode-card-shell"><button class="episode-card" id="classroom-episode-button" type="button"><canvas class="episode-card-preview" id="classroom-preview-canvas" aria-label="Classroom 3D preview"></canvas></button><strong>CLASSROOM</strong></div><div class="episode-card-shell"><button class="episode-card" id="store-episode-button" type="button"><canvas class="episode-card-preview" id="store-preview-canvas" aria-label="Store 3D preview"></canvas></button><strong>STORE</strong></div></div></div>
+        <div class="episode-screen-content"><p>EPISODE SELECT</p><h1>ESCAPE</h1><div class="episode-card-grid"><div class="episode-card-shell"><button class="episode-card" id="parking-lot-episode-button" type="button"><canvas class="episode-card-preview" id="parking-preview-canvas" aria-label="Parking lot 3D preview"></canvas></button><strong>PARKING LOT</strong></div><div class="episode-card-shell"><button class="episode-card" id="classroom-episode-button" type="button"><canvas class="episode-card-preview" id="classroom-preview-canvas" aria-label="Classroom 3D preview"></canvas></button><strong>CLASSROOM</strong></div><div class="episode-card-shell"><button class="episode-card" id="chess-episode-button" type="button"><canvas class="episode-card-preview" id="chess-preview-canvas" aria-label="Chess 3D preview"></canvas></button><strong>CHESS</strong></div></div></div>
       </section>
       <canvas id="range-canvas" aria-label="Escape game view"></canvas>
       <div class="crosshair" aria-hidden="true"><span></span><i></i><b></b><em></em></div>
@@ -140,11 +140,11 @@ const classroomEpisodeButton = document.querySelector<HTMLButtonElement>(
 const classroomPreviewCanvas = document.querySelector<HTMLCanvasElement>(
   "#classroom-preview-canvas",
 )!;
-const storeEpisodeButton = document.querySelector<HTMLButtonElement>(
-  "#store-episode-button",
+const chessEpisodeButton = document.querySelector<HTMLButtonElement>(
+  "#chess-episode-button",
 )!;
-const storePreviewCanvas = document.querySelector<HTMLCanvasElement>(
-  "#store-preview-canvas",
+const chessPreviewCanvas = document.querySelector<HTMLCanvasElement>(
+  "#chess-preview-canvas",
 )!;
 const crosshair = document.querySelector<HTMLElement>(".crosshair")!;
 const hitMarker = document.querySelector<HTMLElement>(".hit-marker")!;
@@ -843,16 +843,16 @@ const classroomStudentInitialRotations = new Map<
 >();
 const classroomStudentKnockdownUntil = new Map<THREE.Object3D, number>();
 let classroomBounds: THREE.Box3 | null = null;
-let storeRoot: THREE.Object3D | null = null;
-let storeBounds: THREE.Box3 | null = null;
+let chessRoot: THREE.Object3D | null = null;
+let chessBounds: THREE.Box3 | null = null;
 let _isInClassroom = false;
-let _isInStore = false;
+let _isInChess = false;
 const classroomLightRig = new THREE.Group();
 classroomLightRig.visible = false;
 scene.add(classroomLightRig);
-const storeLightRig = new THREE.Group();
-storeLightRig.visible = false;
-scene.add(storeLightRig);
+const chessLightRig = new THREE.Group();
+chessLightRig.visible = false;
+scene.add(chessLightRig);
 const parkingObstacles: THREE.Box3[] = [];
 const classroomObstacles: THREE.Box3[] = [];
 const matryoshkaObstacles: THREE.Box3[] = [];
@@ -1287,14 +1287,14 @@ function restartCurrentEpisode(): void {
     mob.physicsBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
     chooseMatryoshkaTarget(mob);
   }
-  _isInStore = currentEpisode === "store";
+  _isInChess = currentEpisode === "chess";
   _isInClassroom = currentEpisode === "classroom";
   if (_isInClassroom) {
     camera.position.copy(classroomSpawnPosition);
     camera.lookAt(classroomEntryPosition);
-  } else if (_isInStore) {
-    camera.position.copy(storeSpawnPosition);
-    camera.lookAt(storeEntryPosition);
+  } else if (_isInChess) {
+    camera.position.copy(chessSpawnPosition);
+    camera.lookAt(chessEntryPosition);
   } else {
     camera.position.set(0, playerHeight, 5);
     camera.rotation.set(0, 0, 0);
@@ -1303,13 +1303,13 @@ function restartCurrentEpisode(): void {
   startEpisode(currentEpisode, {
     parkingLotRoot,
     classroomRoot,
-    storeRoot,
+    chessRoot,
     parkedCars,
     camera,
     classroomSpawnPosition,
     classroomEntryPosition,
-    storeSpawnPosition,
-    storeEntryPosition,
+    chessSpawnPosition,
+    chessEntryPosition,
     closeMenu,
     lockPointer,
     gunshotAudioContext,
@@ -1481,13 +1481,13 @@ function _getMatryoshkaFreeRoamTarget(
 function addMapPointFromAim(): void {
   const activeRoot = _isInClassroom
     ? classroomRoot
-    : _isInStore
-      ? storeRoot
+    : _isInChess
+      ? chessRoot
       : parkingLotRoot;
   const activeBounds = _isInClassroom
     ? classroomBounds
-    : _isInStore
-      ? storeBounds
+    : _isInChess
+      ? chessBounds
       : parkingBounds;
   if (!activeRoot || !activeBounds) return;
   camera.updateMatrixWorld(true);
@@ -2326,7 +2326,7 @@ function updateClassroomTeacher(now: number): void {
 }
 
 function updateMatryoshkaMobs(now: number, delta: number): void {
-  if (_isInStore) {
+  if (_isInChess) {
     parkingLotFearActive = false;
     fearActive = false;
     fearOverlay.classList.remove("is-visible");
@@ -2635,7 +2635,7 @@ function spawnMatryoshkaMob(
       visionIndicator.frustumCulled = false;
       const mobVisible = classroomOnly
         ? _isInClassroom
-        : !_isInStore && !_isInClassroom;
+        : !_isInChess && !_isInClassroom;
       mobObject.visible = mobVisible;
       visionIndicator.visible = mobVisible && matryoshkaVisionSetting.checked;
       matryoshkaHitboxHelper.visible = mobVisible && matryoshkaHitboxSetting.checked;
@@ -3048,10 +3048,10 @@ function getRandomKeySpawnPosition(): THREE.Vector3 | null {
       Math.random() < 0.75 ? Math.pow(Math.random(), 0.45) : Math.random();
     const z = THREE.MathUtils.lerp(minZ, maxZ, zDistribution);
 
-    const nearStoreEntry =
-      Math.abs(x - storeEntryPosition.x) < 3 &&
-      Math.abs(z - storeEntryPosition.z) < 3;
-    if (nearStoreEntry) continue;
+    const nearChessEntry =
+      Math.abs(x - chessEntryPosition.x) < 3 &&
+      Math.abs(z - chessEntryPosition.z) < 3;
+    if (nearChessEntry) continue;
     if (overlapsParkingObstacle(x, z, 1.1)) continue;
 
     const hit = getMatryoshkaGroundHit(x, z);
@@ -3074,8 +3074,8 @@ const parkingProjectileRaycaster = new THREE.Raycaster();
 const parkingLotLoader = new FBXLoader();
 const classroomSpawnPosition = new THREE.Vector3();
 const classroomEntryPosition = new THREE.Vector3();
-const storeSpawnPosition = new THREE.Vector3();
-const storeEntryPosition = new THREE.Vector3();
+const chessSpawnPosition = new THREE.Vector3();
+const chessEntryPosition = new THREE.Vector3();
 const _keyPickupPosition = new THREE.Vector3();
 const parkingLotUrl = new URL(
   "../assets/parkingLot/parking.fbx",
@@ -3494,22 +3494,22 @@ parkingLotLoader.load(
       },
     );
 
-    const storeLoader = new GLTFLoader();
-    const storeUrl = new URL("../assets/store/empty-store.glb", import.meta.url)
+    const chessLoader = new GLTFLoader();
+    const chessUrl = new URL("../assets/chess/eyes-dream_core.glb", import.meta.url)
       .href;
-    storeLoader.load(
-      storeUrl,
+    chessLoader.load(
+      chessUrl,
       (gltf) => {
-        const store = gltf.scene;
-        const storeSetup = prepareStoreScene(
-          store,
-          storeLightRig,
+        const chess = gltf.scene;
+        const chessSetup = prepareChessScene(
+          chess,
+          chessLightRig,
           playerHeight,
         );
-        storeRoot = store;
-        storeBounds = storeSetup.bounds;
-        storeSpawnPosition.copy(storeSetup.spawnPosition);
-        storeEntryPosition.copy(storeSetup.entryPosition);
+        chessRoot = chess;
+        chessBounds = chessSetup.bounds;
+        chessSpawnPosition.copy(chessSetup.spawnPosition);
+        chessEntryPosition.copy(chessSetup.entryPosition);
 
         const keyLoader = new GLTFLoader();
         const keyUrl = new URL(
@@ -3633,11 +3633,11 @@ parkingLotLoader.load(
             console.error("Failed to load key pickup model.", error);
           },
         );
-        scene.add(store);
+        scene.add(chess);
       },
       undefined,
       (error) => {
-        console.error("Failed to load store model.", error);
+        console.error("Failed to load chess model.", error);
       },
     );
   },
@@ -5301,7 +5301,7 @@ function updateKeyInteractionPrompt(): void {
     }
     return;
   }
-  if (_isInStore) {
+  if (_isInChess) {
     keyPickupPrompt.hidden = true;
     weaponPickupPrompt.hidden = true;
     vehicleSearchHint.hidden = true;
@@ -5849,12 +5849,7 @@ function updateTrueCarSoundIndicator(): void {
 
 function lockPointer(): void {
   if (controls.isLocked) return;
-  const pointerLockRequest = canvas.requestPointerLock({
-    unadjustedMovement: rawInputEnabled,
-  });
-  void pointerLockRequest?.catch(() => {
-    if (rawInputEnabled) void canvas.requestPointerLock();
-  });
+  controls.lock(rawInputEnabled);
 }
 
 async function toggleFullscreen(): Promise<void> {
@@ -6051,8 +6046,8 @@ function closeMenu(): void {
 }
 
 function syncEpisodeOnlyObjects(): void {
-  const parkingObjectsVisible = !_isInStore && !_isInClassroom;
-  storeLightRig.visible = _isInStore;
+  const parkingObjectsVisible = !_isInChess && !_isInClassroom;
+  chessLightRig.visible = _isInChess;
   classroomStudents.forEach((student) => {
     student.visible = _isInClassroom;
   });
@@ -6084,7 +6079,7 @@ const enterEpisode = createEpisodeEntryController({
     gameplayStarted = true;
   },
   setEpisodeFlags: (episodeId) => {
-    _isInStore = episodeId === "store";
+    _isInChess = episodeId === "chess";
     _isInClassroom = episodeId === "classroom";
     parkingLotFearActive = false;
     classroomFearActive = false;
@@ -6108,13 +6103,13 @@ const enterEpisode = createEpisodeEntryController({
   getStartEpisodeDeps: () => ({
     parkingLotRoot,
     classroomRoot,
-    storeRoot,
+    chessRoot,
     parkedCars,
     camera,
     classroomSpawnPosition,
     classroomEntryPosition,
-    storeSpawnPosition,
-    storeEntryPosition,
+    chessSpawnPosition,
+    chessEntryPosition,
     closeMenu,
     lockPointer,
     gunshotAudioContext,
@@ -6131,8 +6126,8 @@ function enterClassroomGame(): void {
   enterEpisode("classroom");
 }
 
-function enterStoreGame(): void {
-  enterEpisode("store");
+function enterChessGame(): void {
+  enterEpisode("chess");
 }
 
 function selectEpisode(episodeId: EpisodeId): void {
@@ -6140,8 +6135,8 @@ function selectEpisode(episodeId: EpisodeId): void {
     enterClassroomGame();
     return;
   }
-  if (episodeId === "store") {
-    enterStoreGame();
+  if (episodeId === "chess") {
+    enterChessGame();
     return;
   }
   enterGame();
@@ -6153,7 +6148,7 @@ bindEpisodeSelection(
   episodeScreen,
   parkingLotEpisodeButton,
   classroomEpisodeButton,
-  storeEpisodeButton,
+  chessEpisodeButton,
   selectEpisode,
 );
 settingsButton.addEventListener("click", () => {
@@ -6220,13 +6215,13 @@ setupEpisodePreviewScenes({
   parkingPreviewCanvas,
   classroomEpisodeButton,
   classroomPreviewCanvas,
-  storeEpisodeButton,
-  storePreviewCanvas,
+  chessEpisodeButton,
+  chessPreviewCanvas,
   parkingLotRoot: () => parkingLotRoot,
   parkedCars: () => parkedCars,
   classroomRoot: () => classroomRoot,
   classroomStudents: () => classroomStudents,
-  storeRoot: () => storeRoot,
+  chessRoot: () => chessRoot,
 });
 
 setupMatryoshkaPreview({
@@ -6407,13 +6402,13 @@ function getPlayerCollisionHeightBounds(): THREE.Vector2 {
 }
 
 function resolveParkingCollision(): void {
-  const activeBounds = _isInStore
-    ? storeBounds
+  const activeBounds = _isInChess
+    ? chessBounds
     : _isInClassroom
       ? classroomBounds
       : parkingBounds;
-  const activeRoot = _isInStore
-    ? storeRoot
+  const activeRoot = _isInChess
+    ? chessRoot
     : _isInClassroom
       ? classroomRoot
       : parkingLotRoot;
@@ -6462,7 +6457,7 @@ function resolveParkingCollision(): void {
   if (
     !hasGround &&
     verticalVelocity < 0 &&
-    _isInStore &&
+    _isInChess &&
     camera.position.y < activeBounds.min.y + playerHeight &&
     activeBounds.min.y + playerHeight <= camera.position.y + 0.3
   ) {
@@ -6485,7 +6480,7 @@ function resolveParkingCollision(): void {
   }
   const playerHeightBounds = getPlayerCollisionHeightBounds();
   const collisionEpsilon = 0.01;
-  const nearbyObstacles = _isInStore
+  const nearbyObstacles = _isInChess
     ? []
     : _isInClassroom
       ? classroomObstacles
@@ -6543,8 +6538,8 @@ function movePlayerWithCollision(distance: THREE.Vector3): void {
 }
 
 function isParkingWallAhead(step: THREE.Vector3): boolean {
-  const activeRoot = _isInStore
-    ? storeRoot
+  const activeRoot = _isInChess
+    ? chessRoot
     : _isInClassroom
       ? classroomRoot
       : parkingLotRoot;
@@ -7049,8 +7044,8 @@ function updateProjectiles(now: number, delta: number): void {
         ? findMapProjectileHits({
             episodeId: _isInClassroom
               ? "classroom"
-              : _isInStore
-                ? "store"
+              : _isInChess
+                ? "chess"
                 : "parking-lot",
             raycaster: parkingProjectileRaycaster,
             origin: projectile.previousPosition,
@@ -7059,7 +7054,7 @@ function updateProjectiles(now: number, delta: number): void {
             projectileRadius,
             parkingLotRoot,
             classroomRoot,
-            storeRoot,
+            chessRoot,
             parkedCars,
             matryoshkaMobs,
             classroomStudents,
@@ -7545,7 +7540,7 @@ function render(): void {
   wasRunning = isRunning;
   if (isRunning) {
     playRunningSound();
-    if (elapsed - lastFootstepSoundAt >= 0.18) {
+    if (elapsed - lastFootstepSoundAt >= runningFootstepInterval) {
       alertMatryoshkasToSound(camera.position);
       lastFootstepSoundAt = elapsed;
     }
@@ -7644,17 +7639,17 @@ applyWeaponSelection();
 const savedEpisode = getStoredEpisodeId();
 if (savedEpisode === "classroom") {
   _isInClassroom = true;
-  _isInStore = false;
-} else if (savedEpisode === "store") {
+  _isInChess = false;
+} else if (savedEpisode === "chess") {
   _isInClassroom = false;
-  _isInStore = true;
+  _isInChess = true;
 } else {
   _isInClassroom = false;
-  _isInStore = false;
+  _isInChess = false;
 }
 restoreEpisodeVisibility(savedEpisode, {
   parkingLotRoot,
   classroomRoot,
-  storeRoot,
+  chessRoot,
 });
 renderer.setAnimationLoop(render);

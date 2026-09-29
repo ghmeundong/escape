@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import type { EpisodeId } from "../../episodes/episodes";
 import { findClassroomProjectileHits } from "../../maps/classroom/projectileHits";
+import { findChessProjectileSurfaceHit } from "../../maps/chess/projectileHits";
 import { findParkingLotProjectileHits } from "../../maps/parkingLot/projectileHits";
-import { findStoreProjectileSurfaceHit } from "../../maps/store/projectileHits";
 import type {
   ProjectileMapHits,
   ProjectileMapQuery,
@@ -18,7 +18,7 @@ export function findMapProjectileHits<Mob extends ProjectileMobTarget>(params: {
   projectileRadius: number;
   parkingLotRoot: THREE.Object3D | null;
   classroomRoot: THREE.Object3D | null;
-  storeRoot: THREE.Object3D | null;
+  chessRoot: THREE.Object3D | null;
   parkedCars: THREE.Object3D[];
   matryoshkaMobs: Mob[];
   classroomStudents: THREE.Object3D[];
@@ -51,11 +51,11 @@ export function findMapProjectileHits<Mob extends ProjectileMobTarget>(params: {
     };
   }
 
-  if (params.episodeId === "store") {
+  if (params.episodeId === "chess") {
     return {
-      surface: findStoreProjectileSurfaceHit({
+      surface: findChessProjectileSurfaceHit({
         ...query,
-        storeRoot: params.storeRoot,
+        chessRoot: params.chessRoot,
       }),
     };
   }

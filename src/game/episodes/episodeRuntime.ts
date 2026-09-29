@@ -42,8 +42,8 @@ export function createEpisodeEntryController(
     params.setGameplayStarted();
     const startEpisodeDeps = params.getStartEpisodeDeps();
     const loadingLabel =
-      episodeId === "store"
-        ? "LOADING STORE..."
+      episodeId === "chess"
+        ? "LOADING CHESS..."
         : episodeId === "classroom"
           ? "LOADING CLASSROOM..."
           : "LOADING PARKING LOT...";
@@ -60,7 +60,7 @@ export function createEpisodeEntryController(
         requestAnimationFrame(beginEpisode);
         return;
       }
-      if (episodeId === "store" && !startEpisodeDeps.storeRoot) {
+      if (episodeId === "chess" && !startEpisodeDeps.chessRoot) {
         params.showLoadingScreen(loadingLabel, 80);
         requestAnimationFrame(beginEpisode);
         return;

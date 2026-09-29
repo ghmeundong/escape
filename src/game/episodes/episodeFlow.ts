@@ -5,13 +5,13 @@ import { setStoredEpisodeId, type EpisodeId } from "./episodes";
 export type EpisodeRuntimeDeps = {
   parkingLotRoot: THREE.Object3D | null;
   classroomRoot: THREE.Object3D | null;
-  storeRoot: THREE.Object3D | null;
+  chessRoot: THREE.Object3D | null;
   parkedCars: THREE.Object3D[];
   camera: THREE.PerspectiveCamera;
   classroomSpawnPosition: THREE.Vector3;
   classroomEntryPosition: THREE.Vector3;
-  storeSpawnPosition: THREE.Vector3;
-  storeEntryPosition: THREE.Vector3;
+  chessSpawnPosition: THREE.Vector3;
+  chessEntryPosition: THREE.Vector3;
   closeMenu: () => void;
   lockPointer: () => void;
   gunshotAudioContext: AudioContext;
@@ -23,26 +23,26 @@ export function restoreEpisodeVisibility(
   episodeId: EpisodeId,
   deps: Pick<
     EpisodeRuntimeDeps,
-    "parkingLotRoot" | "classroomRoot" | "storeRoot"
+    "parkingLotRoot" | "classroomRoot" | "chessRoot"
   >,
 ): void {
   if (episodeId === "classroom") {
     if (deps.parkingLotRoot) deps.parkingLotRoot.visible = false;
     if (deps.classroomRoot) deps.classroomRoot.visible = true;
-    if (deps.storeRoot) deps.storeRoot.visible = false;
+    if (deps.chessRoot) deps.chessRoot.visible = false;
     return;
   }
 
-  if (episodeId === "store") {
+  if (episodeId === "chess") {
     if (deps.parkingLotRoot) deps.parkingLotRoot.visible = false;
     if (deps.classroomRoot) deps.classroomRoot.visible = false;
-    if (deps.storeRoot) deps.storeRoot.visible = true;
+    if (deps.chessRoot) deps.chessRoot.visible = true;
     return;
   }
 
   if (deps.parkingLotRoot) deps.parkingLotRoot.visible = true;
   if (deps.classroomRoot) deps.classroomRoot.visible = false;
-  if (deps.storeRoot) deps.storeRoot.visible = false;
+  if (deps.chessRoot) deps.chessRoot.visible = false;
 }
 
 export function startEpisode(
@@ -54,7 +54,7 @@ export function startEpisode(
   if (episodeId === "classroom") {
     if (!deps.classroomRoot) return;
     if (deps.parkingLotRoot) deps.parkingLotRoot.visible = false;
-    if (deps.storeRoot) deps.storeRoot.visible = false;
+    if (deps.chessRoot) deps.chessRoot.visible = false;
     deps.parkedCars.forEach((car) => {
       car.visible = false;
     });
@@ -62,21 +62,21 @@ export function startEpisode(
     deps.camera.position.copy(deps.classroomSpawnPosition);
     deps.camera.lookAt(deps.classroomEntryPosition);
     deps.camera.updateMatrixWorld(true);
-  } else if (episodeId === "store") {
-    if (!deps.storeRoot) return;
+  } else if (episodeId === "chess") {
+    if (!deps.chessRoot) return;
     if (deps.parkingLotRoot) deps.parkingLotRoot.visible = false;
     if (deps.classroomRoot) deps.classroomRoot.visible = false;
     deps.parkedCars.forEach((car) => {
       car.visible = false;
     });
-    deps.storeRoot.visible = true;
-    deps.camera.position.copy(deps.storeSpawnPosition);
-    deps.camera.lookAt(deps.storeEntryPosition);
+    deps.chessRoot.visible = true;
+    deps.camera.position.copy(deps.chessSpawnPosition);
+    deps.camera.lookAt(deps.chessEntryPosition);
     deps.camera.updateMatrixWorld(true);
   } else {
     if (deps.parkingLotRoot) deps.parkingLotRoot.visible = true;
     if (deps.classroomRoot) deps.classroomRoot.visible = false;
-    if (deps.storeRoot) deps.storeRoot.visible = false;
+    if (deps.chessRoot) deps.chessRoot.visible = false;
     deps.parkedCars.forEach((car) => {
       car.visible = true;
     });

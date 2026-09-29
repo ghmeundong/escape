@@ -54,8 +54,8 @@ export function bindEpisodeSelection(
   episodeScreen: HTMLElement,
   parkingLotEpisodeButton: HTMLButtonElement,
   classroomEpisodeButton: HTMLButtonElement,
-  storeEpisodeButton: HTMLButtonElement,
-  startEpisode: (episodeId: "parking-lot" | "classroom" | "store") => void,
+  chessEpisodeButton: HTMLButtonElement,
+  startEpisode: (episodeId: "parking-lot" | "classroom" | "chess") => void,
 ): void {
   startPlayButton.addEventListener("click", () => {
     startScreen.classList.remove("is-visible");
@@ -68,5 +68,5 @@ export function bindEpisodeSelection(
   classroomEpisodeButton.addEventListener("click", () =>
     startEpisode("classroom"),
   );
-  storeEpisodeButton.addEventListener("click", () => startEpisode("store"));
+  chessEpisodeButton.addEventListener("click", () => startEpisode("chess"));
 }
