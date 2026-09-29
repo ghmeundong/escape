@@ -171,13 +171,15 @@ export function tickPlayerStaminaRuntime(params: {
     staminaBarFill,
   } = params;
 
+  const sprintModifierHeld =
+    keys.has("ShiftLeft") || keys.has("ShiftRight");
   const sprintPressed =
     controls.isLocked &&
     !trueCarEntered &&
     !startScreen.classList.contains("is-visible") &&
     keys.has("KeyW") &&
     !weaponReloading &&
-    (keys.has("ShiftLeft") || keys.has("ShiftRight"));
+    sprintModifierHeld;
 
   const playerMaxStamina = 130;
   const playerSprintThresholdRatio = 0.3;
@@ -191,7 +193,7 @@ export function tickPlayerStaminaRuntime(params: {
     playerStamina > 0.01 &&
     (playerSprintActive || playerStamina >= playerSprintThreshold);
 
-  if (!sprintPressed) {
+  if (!sprintModifierHeld) {
     playerSprintActive = false;
     playerStamina = Math.min(
       playerMaxStamina,
@@ -208,10 +210,6 @@ export function tickPlayerStaminaRuntime(params: {
     }
   } else {
     playerSprintActive = false;
-    playerStamina = Math.min(
-      playerMaxStamina,
-      playerStamina + playerStaminaRegenPerSecond * delta,
-    );
   }
 
   const staminaRatio = Math.max(
@@ -225,8 +223,8 @@ export function tickPlayerStaminaRuntime(params: {
     ? "linear-gradient(90deg, #ffe9a8 0%, #ffb153 38%, #ff7d5f 100%)"
     : "linear-gradient(90deg, #e9f3ff 0%, #94d9ff 33%, #74d5b1 72%, #a8f0b8 100%)";
   staminaBarFill.style.boxShadow = isLowStamina
-    ? "0 0 12px rgba(255, 146, 91, 0.8)"
-    : "0 0 14px rgba(134, 210, 145, 0.8)";
+    ? "0 0 0.75rem rgba(255, 146, 91, 0.8)"
+    : "0 0 0.875rem rgba(134, 210, 145, 0.8)";
 
   return { playerStamina, playerSprintActive };
 }

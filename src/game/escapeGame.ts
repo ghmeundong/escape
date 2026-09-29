@@ -4,7 +4,11 @@ import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { getStoredEpisodeId, type EpisodeId } from "./episodes/episodes";
+import {
+  getStoredEpisodeId,
+  setStoredEpisodeId,
+  type EpisodeId,
+} from "./episodes/episodes";
 import {
   startEpisode,
   restoreEpisodeVisibility,
@@ -86,7 +90,7 @@ app.innerHTML = `
         <button class="settings-close" type="button" aria-label="Close settings" title="Close settings">×</button>
         <section class="menu-home menu-view is-visible" aria-label="Pause menu">
           <h1>PAUSED</h1>
-          <div class="menu-choice-list"><button class="menu-choice-button" id="menu-settings-button" type="button"><strong>ENVIRONMENT SETTINGS</strong><span>Adjust your escape environment</span></button><button class="menu-choice-button menu-exit-button" id="menu-exit-button" type="button"><strong>EXIT</strong><span>Close ESCAPE</span></button></div>
+          <div class="menu-choice-list"><button class="menu-choice-button" id="menu-settings-button" type="button"><strong>ENVIRONMENT SETTINGS</strong><span>Adjust your escape environment</span></button><button class="menu-choice-button menu-exit-button" id="menu-exit-button" type="button"><strong>EXIT</strong><span>Return to menu</span></button></div>
         </section>
         <section class="mode-menu menu-view" aria-label="Mode selection">
           <h1>MODE SELECT</h1>
@@ -937,6 +941,8 @@ let classroomBellBuffer: AudioBuffer | null = null;
 let classroomBellSource: AudioBufferSourceNode | null = null;
 let classroomBellPlaying = false;
 let classroomBellNextAt = -Infinity;
+const classroomDeferredReloadSoundPosition = new THREE.Vector3();
+let classroomDeferredReloadSoundUntil = -Infinity;
 const classroomBellPlaybackRate = 1.35;
 const classroomBellInterval = 20;
 const classroomTeacherTurnDelayMin = 8;
@@ -977,9 +983,29 @@ const playerSprintThresholdRatio = 0.3;
 const playerSprintThreshold = playerMaxStamina * playerSprintThresholdRatio;
 let playerStamina = playerMaxStamina;
 let playerSprintActive = false;
+let playerSprintAcceleration = 0;
+let sprintJumpSpeed = playerWalkSpeed;
 let runningFootstepInterval = 0.5;
 let runningFootstepClipDuration = runningFootstepInterval * 2;
 let runningFootstepLoopStart = 0;
+let runningFootstepCyclesPerLoop = 1;
+let runningFootstepPeakTimes: number[] = [];
+let runningFootstepSamples: AudioBuffer[] = [];
+const runningFootstepSources = new Set<AudioBufferSourceNode>();
+const runningFootstepGains = new Map<
+  AudioBufferSourceNode,
+  GainNode
+>();
+let nextRunningFootstepIndex = 0;
+let runningStepPhase = 0;
+let runningFeedbackStrength = 1;
+let nextRunningStepPhase = 1;
+
+function getStaminaSprintFactor(): number {
+  return playerStamina >= playerSprintThreshold
+    ? 1
+    : THREE.MathUtils.clamp(playerStamina / playerSprintThreshold, 0, 1);
+}
 
 function detectTwoFootstepClipDuration(buffer: AudioBuffer): number {
   const samples = buffer.getChannelData(0);
@@ -1041,10 +1067,54 @@ function detectTwoFootstepClipDuration(buffer: AudioBuffer): number {
               eleventhFootstep * 0.01 - 0.035,
             ),
           );
+    runningFootstepCyclesPerLoop =
+      eleventhFootstep === undefined ? Math.max(1, peaks.length - 1) : 10;
+    const loopDuration = Math.max(
+      0.01,
+      runningFootstepClipDuration - runningFootstepLoopStart,
+    );
+    runningFootstepInterval = loopDuration / runningFootstepCyclesPerLoop;
   } else {
     runningFootstepLoopStart = 0;
     runningFootstepClipDuration = Math.min(buffer.duration, detectedDuration);
+    runningFootstepCyclesPerLoop = Math.max(
+      1,
+      Math.round(runningFootstepClipDuration / runningFootstepInterval),
+    );
+    runningFootstepInterval =
+      runningFootstepClipDuration / runningFootstepCyclesPerLoop;
   }
+  runningFootstepPeakTimes = peaks
+    .slice(0, runningFootstepCyclesPerLoop)
+    .map((peak) => peak * 0.01);
+  runningFootstepSamples = runningFootstepPeakTimes.map((peakTime, index) => {
+    const startTime = peakTime;
+    const nextPeak = runningFootstepPeakTimes[index + 1];
+    const sampleEnd = Math.min(
+      runningFootstepClipDuration,
+      peakTime + Math.min(0.28, runningFootstepInterval * 0.65),
+      nextPeak === undefined
+        ? runningFootstepClipDuration
+        : (peakTime + nextPeak) * 0.5 + 0.05,
+    );
+    const startFrame = Math.floor(startTime * buffer.sampleRate);
+    const endFrame = Math.max(
+      startFrame + 1,
+      Math.min(buffer.length, Math.ceil(sampleEnd * buffer.sampleRate)),
+    );
+    const sample = gunshotAudioContext.createBuffer(
+      buffer.numberOfChannels,
+      endFrame - startFrame,
+      buffer.sampleRate,
+    );
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      sample.copyToChannel(
+        buffer.getChannelData(channel).subarray(startFrame, endFrame),
+        channel,
+      );
+    }
+    return sample;
+  });
   return runningFootstepClipDuration;
 }
 let _matryoshkaVehicleHeight = 20;
@@ -1062,7 +1132,6 @@ const matryoshkaSoundTarget = new THREE.Vector3();
 const matryoshkaCarSoundTarget = new THREE.Vector3();
 let matryoshkaSoundVersion = 0;
 let matryoshkaCarSoundVersion = 0;
-let lastFootstepSoundAt = -Infinity;
 let playerDeathActive = false;
 let playerDeathElapsed = 0;
 let classroomContactDeathPending = false;
@@ -1152,9 +1221,11 @@ function exitApplication(): void {
   window.close();
 }
 
-function returnToHome(): void {
+function returnToEpisodeSelect(): void {
   if (controls.isLocked) controls.unlock();
   stopHeartbeatSound();
+  setStoredEpisodeId("parking-lot");
+  sessionStorage.setItem("escape-return-to-episode-select", "true");
   window.location.reload();
 }
 
@@ -1193,6 +1264,7 @@ function restartCurrentEpisode(): void {
   resetRecoilState();
   verticalVelocity = 0;
   isGrounded = false;
+  sprintingInAir = false;
   cancelWeaponReload();
   weaponAmmo = 0;
   weapon.visible = false;
@@ -1203,6 +1275,7 @@ function restartCurrentEpisode(): void {
   gsap.killTweensOf(weapon.rotation);
   playerStamina = playerMaxStamina;
   playerSprintActive = false;
+  playerSprintAcceleration = 0;
   keyPickupCollected = false;
   weaponPickupCollected = false;
   if (keyPickupObject) keyPickupObject.visible = true;
@@ -1220,6 +1293,7 @@ function restartCurrentEpisode(): void {
   classroomTeacherStudentTurnAt = -Infinity;
   classroomBellNextAt = -Infinity;
   classroomBellPlaying = false;
+  classroomDeferredReloadSoundUntil = -Infinity;
   if (classroomBellSource) {
     classroomBellSource.stop();
     classroomBellSource.disconnect();
@@ -1321,7 +1395,7 @@ function restartCurrentEpisode(): void {
 }
 
 deathRetryButton.addEventListener("click", restartCurrentEpisode);
-deathExitButton.addEventListener("click", returnToHome);
+deathExitButton.addEventListener("click", returnToEpisodeSelect);
 
 function getMatryoshkaGroundHit(
   x: number,
@@ -1545,7 +1619,7 @@ function turnClassroomTeacherTowardPlayer(now: number): void {
 
 function scheduleClassroomTeacherTurn(now: number): void {
   if (!classroomTeacher || classroomTeacherTurned) return;
-  classroomTeacherTurnPendingAt = now + 0.7;
+  classroomTeacherTurnPendingAt = now + 0.5;
 }
 
 function alertClassroomStudents(now: number): void {
@@ -1558,8 +1632,15 @@ function alertMatryoshkasToSound(
   position: THREE.Vector3,
   source: MatryoshkaSoundSource = "player",
   interruptChase = false,
+  deferUntilBellEnds = 0,
 ): void {
-  if (_isInClassroom && source === "player" && classroomBellPlaying) return;
+  if (_isInClassroom && source === "player" && classroomBellPlaying) {
+    if (deferUntilBellEnds > performance.now() / 1000) {
+      classroomDeferredReloadSoundPosition.copy(position);
+      classroomDeferredReloadSoundUntil = deferUntilBellEnds;
+    }
+    return;
+  }
   const soundTarget =
     source === "player" ? matryoshkaSoundTarget : matryoshkaCarSoundTarget;
   if (source === "player") matryoshkaSoundVersion += 1;
@@ -3910,7 +3991,6 @@ let gunshotBuffer: AudioBuffer | null = null;
 let knockSoundBuffer: AudioBuffer | null = null;
 let trueCarSoundBuffer: AudioBuffer | null = null;
 let runningSoundBuffer: AudioBuffer | null = null;
-let runningSoundSource: AudioBufferSourceNode | null = null;
 let soundVolumeMultiplier = 1;
 let chaseSoundBuffer: AudioBuffer | null = null;
 let lastChaseSoundAt = -Infinity;
@@ -4232,6 +4312,13 @@ function playClassroomBell(now: number): void {
     classroomBellSource = null;
     classroomBellPlaying = false;
     classroomBellNextAt = performance.now() / 1000 + classroomBellInterval;
+    if (classroomDeferredReloadSoundUntil > performance.now() / 1000) {
+      const deferredPosition = classroomDeferredReloadSoundPosition.clone();
+      classroomDeferredReloadSoundUntil = -Infinity;
+      alertMatryoshkasToSound(deferredPosition);
+    } else {
+      classroomDeferredReloadSoundUntil = -Infinity;
+    }
   };
   source.start();
 }
@@ -4272,6 +4359,8 @@ function startWeaponReload(): void {
     weaponReloading ||
     !weaponPickupCollected ||
     !weaponDrawn ||
+    weaponHolstering ||
+    weaponRaising ||
     trueCarEntered
   )
     return;
@@ -4285,10 +4374,22 @@ function startWeaponReload(): void {
   const generation = ++reloadGeneration;
   setAiming(false);
   const beginReload = (): void => {
-    if (!reloadSoundBuffer || !weaponReloading || generation !== reloadGeneration)
+    if (
+      !reloadSoundBuffer ||
+      !weaponReloading ||
+      generation !== reloadGeneration ||
+      !weaponDrawn ||
+      weaponHolstering ||
+      weaponRaising
+    )
       return;
     camera.getWorldPosition(cameraOrigin);
-    alertMatryoshkasToSound(cameraOrigin);
+    alertMatryoshkasToSound(
+      cameraOrigin,
+      "player",
+      false,
+      performance.now() / 1000 + reloadSoundBuffer.duration,
+    );
     weaponReloadDuration = reloadSoundBuffer.duration;
     weaponReloadStartedAt = gunshotAudioContext.currentTime;
     const source = gunshotAudioContext.createBufferSource();
@@ -4531,40 +4632,50 @@ function resumeGameplayAudio(): void {
   void gunshotAudioContext.resume().then(restartHeartbeat);
 }
 
-function playRunningSound(): void {
-  if (!runningSoundBuffer || runningSoundSource) return;
-  const startRunningSound = (): void => {
-    if (!runningSoundBuffer || runningSoundSource) return;
+function playRunningFootstep(): void {
+  const play = (): void => {
+    if (runningFootstepSamples.length === 0) return;
+    const sample =
+      runningFootstepSamples[
+        nextRunningFootstepIndex % runningFootstepSamples.length
+      ];
+    nextRunningFootstepIndex += 1;
     const source = gunshotAudioContext.createBufferSource();
     const gain = gunshotAudioContext.createGain();
-    source.buffer = runningSoundBuffer;
-    source.loop = true;
-    source.loopStart = runningFootstepLoopStart;
-    source.loopEnd = runningFootstepClipDuration;
-    gain.gain.value = soundVolumeMultiplier;
+    source.buffer = sample;
+    gain.gain.value = soundVolumeMultiplier * runningFeedbackStrength;
     source.connect(gain);
     gain.connect(gunshotAudioContext.destination);
+    runningFootstepSources.add(source);
+    runningFootstepGains.set(source, gain);
     source.onended = () => {
-      if (runningSoundSource === source) runningSoundSource = null;
+      runningFootstepSources.delete(source);
+      runningFootstepGains.delete(source);
+      source.disconnect();
     };
-    runningSoundSource = source;
-    source.start(0, runningFootstepLoopStart);
+    source.start();
   };
-  if (gunshotAudioContext.state === "running") startRunningSound();
+  if (gunshotAudioContext.state === "running") play();
   else
     void gunshotAudioContext
       .resume()
-      .then(startRunningSound)
+      .then(play)
       .catch((error: unknown) =>
         console.error("Running audio playback failed.", error),
       );
 }
 
 function stopRunningSound(): void {
-  if (!runningSoundSource) return;
-  runningSoundSource.stop();
-  runningSoundSource.disconnect();
-  runningSoundSource = null;
+  runningFootstepSources.forEach((source) => {
+    source.onended = null;
+    source.stop();
+    source.disconnect();
+  });
+  runningFootstepSources.clear();
+  runningFootstepGains.clear();
+  nextRunningFootstepIndex = 0;
+  runningStepPhase = 0;
+  nextRunningStepPhase = 1;
 }
 
 function playTrueCarSound(): void {
@@ -5010,6 +5121,33 @@ gridColorSetting.addEventListener("input", () => {
     material.color.set(gridColorSetting.value),
   );
 });
+const settingPixelsToRem = (value: string): string =>
+  `${Number(value) / 16}rem`;
+const formatSettingRem = (value: string): string =>
+  `${(Number(value) / 16).toFixed(4).replace(/\.?0+$/, "")}rem`;
+const syncSizeSettingLabel = (
+  setting: HTMLInputElement,
+  output: HTMLOutputElement,
+): void => {
+  output.value = formatSettingRem(setting.value);
+};
+
+const sizeLabelSettings: Array<[HTMLInputElement, HTMLOutputElement]> = [
+  [crosshairOutlineThicknessSetting, crosshairOutlineThicknessValue],
+  [crosshairGapSetting, crosshairGapValue],
+  [crosshairLengthSetting, crosshairLengthValue],
+  [crosshairThicknessSetting, crosshairThicknessValue],
+  [crosshairDotSizeSetting, crosshairDotSizeValue],
+  [crosshairCircleSizeSetting, crosshairCircleSizeValue],
+  [hitMarkerSizeSetting, hitMarkerSizeValue],
+  [hitMarkerLengthSetting, hitMarkerLengthValue],
+  [hitMarkerThicknessSetting, hitMarkerThicknessValue],
+  [hitMarkerGapSetting, hitMarkerGapValue],
+];
+sizeLabelSettings.forEach(([setting, output]) =>
+  syncSizeSettingLabel(setting, output),
+);
+
 crosshairStyleSetting.addEventListener("change", () => {
   const styleClass =
     {
@@ -5048,55 +5186,55 @@ crosshairOutlineThicknessSetting.addEventListener("input", () => {
   crosshairPreviewTargets.forEach((crosshairTarget) =>
     crosshairTarget.style.setProperty(
       "--crosshair-outline-thickness",
-      `${crosshairOutlineThicknessSetting.value}px`,
+      settingPixelsToRem(crosshairOutlineThicknessSetting.value),
     ),
   );
-  crosshairOutlineThicknessValue.value = `${crosshairOutlineThicknessSetting.value}px`;
+  syncSizeSettingLabel(crosshairOutlineThicknessSetting, crosshairOutlineThicknessValue);
 });
 crosshairGapSetting.addEventListener("input", () => {
   crosshairPreviewTargets.forEach((crosshairTarget) =>
     crosshairTarget.style.setProperty(
       "--crosshair-gap",
-      `${crosshairGapSetting.value}px`,
+      settingPixelsToRem(crosshairGapSetting.value),
     ),
   );
-  crosshairGapValue.value = `${crosshairGapSetting.value}px`;
+  syncSizeSettingLabel(crosshairGapSetting, crosshairGapValue);
 });
 crosshairLengthSetting.addEventListener("input", () => {
   crosshairPreviewTargets.forEach((crosshairTarget) =>
     crosshairTarget.style.setProperty(
       "--crosshair-length",
-      `${crosshairLengthSetting.value}px`,
+      settingPixelsToRem(crosshairLengthSetting.value),
     ),
   );
-  crosshairLengthValue.value = `${crosshairLengthSetting.value}px`;
+  syncSizeSettingLabel(crosshairLengthSetting, crosshairLengthValue);
 });
 crosshairThicknessSetting.addEventListener("input", () => {
   crosshairPreviewTargets.forEach((crosshairTarget) =>
     crosshairTarget.style.setProperty(
       "--crosshair-thickness",
-      `${crosshairThicknessSetting.value}px`,
+      settingPixelsToRem(crosshairThicknessSetting.value),
     ),
   );
-  crosshairThicknessValue.value = `${crosshairThicknessSetting.value}px`;
+  syncSizeSettingLabel(crosshairThicknessSetting, crosshairThicknessValue);
 });
 crosshairDotSizeSetting.addEventListener("input", () => {
   crosshairPreviewTargets.forEach((crosshairTarget) =>
     crosshairTarget.style.setProperty(
       "--crosshair-dot-size",
-      `${crosshairDotSizeSetting.value}px`,
+      settingPixelsToRem(crosshairDotSizeSetting.value),
     ),
   );
-  crosshairDotSizeValue.value = `${crosshairDotSizeSetting.value}px`;
+  syncSizeSettingLabel(crosshairDotSizeSetting, crosshairDotSizeValue);
 });
 crosshairCircleSizeSetting.addEventListener("input", () => {
   crosshairPreviewTargets.forEach((crosshairTarget) =>
     crosshairTarget.style.setProperty(
       "--crosshair-circle-size",
-      `${crosshairCircleSizeSetting.value}px`,
+      settingPixelsToRem(crosshairCircleSizeSetting.value),
     ),
   );
-  crosshairCircleSizeValue.value = `${crosshairCircleSizeSetting.value}px`;
+  syncSizeSettingLabel(crosshairCircleSizeSetting, crosshairCircleSizeValue);
 });
 crosshairOpacitySetting.addEventListener("input", () => {
   crosshairPreviewTargets.forEach((crosshairTarget) => {
@@ -5131,37 +5269,37 @@ hitMarkerSizeSetting.addEventListener("input", () => {
   hitMarkerPreviewTargets.forEach((hitMarkerTarget) =>
     hitMarkerTarget.style.setProperty(
       "--hit-marker-size",
-      `${hitMarkerSizeSetting.value}px`,
+      settingPixelsToRem(hitMarkerSizeSetting.value),
     ),
   );
-  hitMarkerSizeValue.value = `${hitMarkerSizeSetting.value}px`;
+  syncSizeSettingLabel(hitMarkerSizeSetting, hitMarkerSizeValue);
 });
 hitMarkerLengthSetting.addEventListener("input", () => {
   hitMarkerPreviewTargets.forEach((hitMarkerTarget) =>
     hitMarkerTarget.style.setProperty(
       "--hit-marker-length",
-      `${hitMarkerLengthSetting.value}px`,
+      settingPixelsToRem(hitMarkerLengthSetting.value),
     ),
   );
-  hitMarkerLengthValue.value = `${hitMarkerLengthSetting.value}px`;
+  syncSizeSettingLabel(hitMarkerLengthSetting, hitMarkerLengthValue);
 });
 hitMarkerThicknessSetting.addEventListener("input", () => {
   hitMarkerPreviewTargets.forEach((hitMarkerTarget) =>
     hitMarkerTarget.style.setProperty(
       "--hit-marker-thickness",
-      `${hitMarkerThicknessSetting.value}px`,
+      settingPixelsToRem(hitMarkerThicknessSetting.value),
     ),
   );
-  hitMarkerThicknessValue.value = `${hitMarkerThicknessSetting.value}px`;
+  syncSizeSettingLabel(hitMarkerThicknessSetting, hitMarkerThicknessValue);
 });
 hitMarkerGapSetting.addEventListener("input", () => {
   hitMarkerPreviewTargets.forEach((hitMarkerTarget) =>
     hitMarkerTarget.style.setProperty(
       "--hit-marker-gap",
-      `${hitMarkerGapSetting.value}px`,
+      settingPixelsToRem(hitMarkerGapSetting.value),
     ),
   );
-  hitMarkerGapValue.value = `${hitMarkerGapSetting.value}px`;
+  syncSizeSettingLabel(hitMarkerGapSetting, hitMarkerGapValue);
 });
 hitMarkerDurationSetting.addEventListener("input", () => {
   hitMarkerDuration = Number(hitMarkerDurationSetting.value);
@@ -5200,6 +5338,9 @@ resolutionScaleSetting.addEventListener("input", () => {
 const keys = new Set<string>();
 const movement = new THREE.Vector3();
 const direction = new THREE.Vector3();
+const sprintJumpDirection = new THREE.Vector3();
+const sprintJumpForward = new THREE.Vector3();
+const sprintJumpRight = new THREE.Vector3();
 const playerHeight = 3.4;
 const playerCollisionRadius = 0.18;
 const gravity = 18;
@@ -5244,7 +5385,7 @@ let classroomBackDoorOpening = false;
 let classroomBackDoorOpened = false;
 let classroomBackDoorOpeningStartedAt = -Infinity;
 let classroomBackDoorOpeningTimer: number | null = null;
-const classroomBackDoorOpeningDuration = 3000;
+const classroomBackDoorOpeningDuration = 3500;
 const classroomStudentLookDirection = new THREE.Vector3();
 const classroomStudentToPlayerDirection = new THREE.Vector3();
 const weaponPickupDistance = 4;
@@ -5254,6 +5395,7 @@ const weaponPickupWorldPosition = new THREE.Vector3();
 const weaponPickupToPlayerDirection = new THREE.Vector3();
 let verticalVelocity = 0;
 let isGrounded = false;
+let sprintingInAir = false;
 
 function isKeyWithinPickupRange(): boolean {
   if (
@@ -5291,8 +5433,10 @@ function updateKeyInteractionPrompt(): void {
     weaponPickupPrompt.hidden = !isWeaponWithinPickupRange();
     trueCarPrompt.hidden = true;
     vehicleSearchHint.textContent = "PRESS [F] TO OPEN BACK DOOR";
-    vehicleSearchHint.hidden =
-      classroomBackDoorOpening || !isClassroomBackDoorWithinInteractionRange();
+    const showBackDoorPrompt =
+      !classroomBackDoorOpening && isClassroomBackDoorWithinInteractionRange();
+    vehicleSearchHint.classList.toggle("interaction-prompt", showBackDoorPrompt);
+    vehicleSearchHint.hidden = !showBackDoorPrompt;
     classroomSeatPrompt.hidden =
       !weaponPickupCollected || !isClassroomSeatWithinInteractionRange();
     if (classroomSeatActive) {
@@ -5302,6 +5446,7 @@ function updateKeyInteractionPrompt(): void {
     return;
   }
   if (_isInChess) {
+    vehicleSearchHint.classList.remove("interaction-prompt");
     keyPickupPrompt.hidden = true;
     weaponPickupPrompt.hidden = true;
     vehicleSearchHint.hidden = true;
@@ -5309,6 +5454,7 @@ function updateKeyInteractionPrompt(): void {
     classroomSeatPrompt.hidden = true;
     return;
   }
+  vehicleSearchHint.classList.remove("interaction-prompt");
   classroomSeatPrompt.hidden = !isClassroomSeatWithinInteractionRange();
   keyPickupPrompt.hidden = !isKeyWithinPickupRange();
   weaponPickupPrompt.hidden = !isWeaponWithinPickupRange();
@@ -5738,7 +5884,7 @@ function enterTrueCar(): void {
   const finishTrueCarEnding = (): void => {
     if (!trueCarEntered || endingReturnScheduled) return;
     endingReturnScheduled = true;
-    window.setTimeout(returnToHome, 1000);
+    window.setTimeout(returnToEpisodeSelect, 1000);
   };
   episodeFadeOverlay.addEventListener(
     "transitionend",
@@ -5770,7 +5916,7 @@ function openClassroomBackDoor(): void {
     window.setTimeout(() => {
       void chaseSoundReady.then(playChaseSound);
     }, 500);
-    window.setTimeout(returnToHome, 3000);
+    window.setTimeout(returnToEpisodeSelect, 3000);
   }, classroomBackDoorOpeningDuration);
 }
 
@@ -5963,6 +6109,37 @@ function handleKeyDown(event: KeyboardEvent): void {
     isGrounded
   ) {
     event.preventDefault();
+    sprintingInAir =
+      keys.has("KeyW") &&
+      !weaponReloading &&
+      (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
+      playerSprintActive;
+    if (sprintingInAir) {
+      sprintJumpSpeed =
+        playerWalkSpeed +
+        (playerRunSpeed - playerWalkSpeed) *
+          playerSprintAcceleration *
+          getStaminaSprintFactor();
+      camera.updateWorldMatrix(true, false);
+      camera.getWorldDirection(sprintJumpForward);
+      sprintJumpForward.y = 0;
+      sprintJumpForward.normalize();
+      sprintJumpRight.setFromMatrixColumn(camera.matrixWorld, 0);
+      sprintJumpRight.y = 0;
+      sprintJumpRight.normalize();
+      sprintJumpDirection
+        .copy(sprintJumpRight)
+        .multiplyScalar(Number(keys.has("KeyD")) - Number(keys.has("KeyA")))
+        .addScaledVector(
+          sprintJumpForward,
+          Number(keys.has("KeyW")) - Number(keys.has("KeyS")),
+        );
+      if (sprintJumpDirection.lengthSq() > 0) sprintJumpDirection.normalize();
+      else {
+        sprintingInAir = false;
+        sprintJumpSpeed = playerWalkSpeed;
+      }
+    }
     verticalVelocity = jumpVelocity;
     isGrounded = false;
   }
@@ -6081,6 +6258,7 @@ const enterEpisode = createEpisodeEntryController({
   setEpisodeFlags: (episodeId) => {
     _isInChess = episodeId === "chess";
     _isInClassroom = episodeId === "classroom";
+    sprintingInAir = false;
     parkingLotFearActive = false;
     classroomFearActive = false;
     fearActive = false;
@@ -6172,7 +6350,7 @@ settingsClose.addEventListener("click", () => {
 menuSettingsButton.addEventListener("click", () => showMenuView("settings"));
 menuExitButton.addEventListener("click", () => {
   if (startScreen.classList.contains("is-visible")) exitApplication();
-  else returnToHome();
+  else returnToEpisodeSelect();
 });
 settingsOverlay.addEventListener("click", (event) => {
   if (event.target === settingsOverlay) settingsClose.click();
@@ -6537,6 +6715,46 @@ function movePlayerWithCollision(distance: THREE.Vector3): void {
   }
 }
 
+function movePlayerWithSprintJumpMomentum(delta: number): void {
+  const distance = sprintJumpSpeed * delta;
+  const stepCount = Math.max(1, Math.ceil(distance / 0.08));
+  const stepDistance = distance / stepCount;
+  for (let stepIndex = 0; stepIndex < stepCount; stepIndex += 1) {
+    if (isWorldWallAhead(sprintJumpDirection, stepDistance)) break;
+    camera.position.addScaledVector(sprintJumpDirection, stepDistance);
+    resolveParkingCollision();
+  }
+}
+
+function isWorldWallAhead(direction: THREE.Vector3, distance: number): boolean {
+  const activeRoot = _isInChess
+    ? chessRoot
+    : _isInClassroom
+      ? classroomRoot
+      : parkingLotRoot;
+  if (!activeRoot) return false;
+  const horizontalDirection = direction.clone().setY(0);
+  if (horizontalDirection.lengthSq() < 0.000001) return false;
+  horizontalDirection.normalize();
+  const sampleHeights = [
+    camera.position.y - 1.8,
+    camera.position.y - 0.8,
+    camera.position.y + 0.2,
+  ];
+  for (const sampleHeight of sampleHeights) {
+    parkingWallRaycaster.set(
+      new THREE.Vector3(camera.position.x, sampleHeight, camera.position.z),
+      horizontalDirection,
+    );
+    parkingWallRaycaster.far = distance + 0.42;
+    const hit = parkingWallRaycaster
+      .intersectObject(activeRoot, true)
+      .find((intersection) => isCollisionSurface(intersection.object));
+    if (hit && hit.distance <= distance + 0.18) return true;
+  }
+  return false;
+}
+
 function isParkingWallAhead(step: THREE.Vector3): boolean {
   const activeRoot = _isInChess
     ? chessRoot
@@ -6557,24 +6775,7 @@ function isParkingWallAhead(step: THREE.Vector3): boolean {
     .add(cameraForward.multiplyScalar(step.z));
   const distance = horizontalStep.length();
   if (distance === 0) return false;
-  horizontalStep.normalize();
-  const sampleHeights = [
-    camera.position.y - 1.8,
-    camera.position.y - 0.8,
-    camera.position.y + 0.2,
-  ];
-  for (const sampleHeight of sampleHeights) {
-    parkingWallRaycaster.set(
-      new THREE.Vector3(camera.position.x, sampleHeight, camera.position.z),
-      horizontalStep,
-    );
-    parkingWallRaycaster.far = distance + 0.42;
-    const hit = parkingWallRaycaster
-      .intersectObject(activeRoot, true)
-      .find((intersection) => isCollisionSurface(intersection.object));
-    if (hit && hit.distance <= distance + 0.18) return true;
-  }
-  return false;
+  return isWorldWallAhead(horizontalStep, distance);
 }
 
 const targetRadius = 0.72;
@@ -7463,6 +7664,7 @@ function render(): void {
   }
 
   movement.set(0, 0, 0);
+  let frameSprintSpeed = playerWalkSpeed;
   if (
     controls.isLocked &&
     !trueCarEntered &&
@@ -7475,16 +7677,30 @@ function render(): void {
       Number(keys.has("KeyW")) - Number(keys.has("KeyS")),
     );
     updatePlayerStamina(delta);
-    if (direction.lengthSq() > 0) {
+    const sprintRequested =
+      isGrounded &&
+      direction.lengthSq() > 0 &&
+      keys.has("KeyW") &&
+      !weaponReloading &&
+      (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
+      playerSprintActive;
+    const sprintAccelerationTarget = sprintRequested || sprintingInAir ? 1 : 0;
+    playerSprintAcceleration +=
+      (sprintAccelerationTarget - playerSprintAcceleration) *
+      Math.min(1, delta * 3.5);
+    frameSprintSpeed = sprintingInAir
+      ? sprintJumpSpeed
+      : playerWalkSpeed +
+        (playerRunSpeed - playerWalkSpeed) *
+          playerSprintAcceleration *
+          getStaminaSprintFactor();
+    if (sprintingInAir) {
+      movePlayerWithSprintJumpMomentum(delta);
+    } else if (direction.lengthSq() > 0) {
       direction.normalize();
-      const isRunning =
-        keys.has("KeyW") &&
-        !weaponReloading &&
-        (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
-        playerSprintActive;
       movement
         .copy(direction)
-        .multiplyScalar((isRunning ? playerRunSpeed : playerWalkSpeed) * delta);
+        .multiplyScalar(frameSprintSpeed * delta);
       movePlayerWithCollision(movement);
     }
 
@@ -7499,6 +7715,22 @@ function render(): void {
   }
   if (trueCarEntered) updateTrueCarSeatPosition();
   else resolveParkingCollision();
+  if (isGrounded) {
+    if (sprintingInAir) {
+      const staminaFactor = getStaminaSprintFactor();
+      playerSprintAcceleration =
+        staminaFactor > 0
+          ? THREE.MathUtils.clamp(
+              (sprintJumpSpeed - playerWalkSpeed) /
+                ((playerRunSpeed - playerWalkSpeed) * staminaFactor),
+              0,
+              1,
+            )
+          : 0;
+    }
+    sprintingInAir = false;
+    sprintJumpDirection.set(0, 0, 0);
+  }
   if (trueCarEntered && trueCar && Number.isFinite(carEndingShakeStartedAt)) {
     const shakeElapsed = performance.now() / 1000 - carEndingShakeStartedAt;
     const shake = carEndingShakePeaks.reduce((amount, peak) => {
@@ -7528,36 +7760,52 @@ function render(): void {
   updateClassroomStudentsFacingPlayer();
   updateClassroomFearState();
 
+  runningFeedbackStrength = getStaminaSprintFactor();
+  runningFootstepGains.forEach((gain) => {
+    gain.gain.value = soundVolumeMultiplier * runningFeedbackStrength;
+  });
   const isMoving = controls.isLocked && direction.lengthSq() > 0;
   const isRunning =
     isMoving &&
+    isGrounded &&
     !classroomSeatActive &&
-    keys.has("KeyW") &&
-    !weaponReloading &&
-    (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
-    playerSprintActive;
-  if (isRunning && !wasRunning) movementBobPhase = 0;
+    frameSprintSpeed > playerWalkSpeed + 0.02;
+  const cadenceScale = THREE.MathUtils.clamp(
+    frameSprintSpeed / playerRunSpeed,
+    0.01,
+    1,
+  );
+  const currentFootstepInterval = runningFootstepInterval / cadenceScale;
+  if (isRunning && !wasRunning) {
+    runningStepPhase = 0;
+    nextRunningStepPhase = 1;
+    playRunningFootstep();
+    alertMatryoshkasToSound(camera.position);
+  }
   wasRunning = isRunning;
   if (isRunning) {
-    playRunningSound();
-    if (elapsed - lastFootstepSoundAt >= runningFootstepInterval) {
+    runningStepPhase += delta / currentFootstepInterval;
+    while (runningStepPhase >= nextRunningStepPhase) {
+      nextRunningStepPhase += 1;
+      playRunningFootstep();
       alertMatryoshkasToSound(camera.position);
-      lastFootstepSoundAt = elapsed;
     }
+    movementBobPhase = Math.PI / 2 + runningStepPhase * Math.PI * 2;
   } else {
     stopRunningSound();
   }
-  if (isMoving)
+  if (!isRunning && isMoving)
     movementBobPhase +=
-      delta * (isRunning ? (Math.PI * 2) / runningFootstepInterval : 7);
-  else movementBobPhase += delta * 2;
+      delta * 7;
+  else if (!isRunning) movementBobPhase += delta * 2;
   if (controls.isLocked && !trueCarEntered && isRunning) {
-    const bobStrength = 0.075;
+    const bobStrength = 0.075 * runningFeedbackStrength;
     cameraBobOffset = Math.sin(movementBobPhase) * bobStrength;
     camera.position.y += cameraBobOffset;
     const bobRoll =
       Math.sin(movementBobPhase * (isRunning ? 0.5 : 1)) *
-      (isRunning ? 0.018 : 0.006);
+      (isRunning ? 0.018 : 0.006) *
+      runningFeedbackStrength;
     cameraBobQuaternion.setFromAxisAngle(cameraBobAxis, bobRoll);
     camera.quaternion.multiply(cameraBobQuaternion);
   } else if (cameraBobQuaternion.angleTo(identityQuaternion) > 0.0001) {
@@ -7578,7 +7826,10 @@ function render(): void {
       : stationarySpreadPixels;
   const configuredGapScale = Number(crosshairGapSetting.value) / 14;
   const crosshairGap = spreadPixels * configuredGapScale;
-  crosshair.style.setProperty("--crosshair-gap", `${crosshairGap}px`);
+  crosshair.style.setProperty(
+    "--crosshair-gap",
+    settingPixelsToRem(crosshairGap.toString()),
+  );
   weaponSwayFactor +=
     ((isMoving ? 1 : 0) - weaponSwayFactor) * Math.min(1, delta * 10);
   const swayAmount =
@@ -7635,7 +7886,15 @@ antialiasingSetting.addEventListener("change", () => {
 });
 
 restoreSettingsFromStorage();
+sizeLabelSettings.forEach(([setting, output]) =>
+  syncSizeSettingLabel(setting, output),
+);
 applyWeaponSelection();
+const shouldShowEpisodeSelectOnLoad =
+  sessionStorage.getItem("escape-return-to-episode-select") === "true";
+sessionStorage.removeItem("escape-return-to-episode-select");
+startScreen.classList.toggle("is-visible", !shouldShowEpisodeSelectOnLoad);
+episodeScreen.classList.toggle("is-visible", shouldShowEpisodeSelectOnLoad);
 const savedEpisode = getStoredEpisodeId();
 if (savedEpisode === "classroom") {
   _isInClassroom = true;
