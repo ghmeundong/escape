@@ -2,15 +2,17 @@ import * as THREE from "three";
 import type {
   ProjectileMapHits,
   ProjectileMapQuery,
+  ProjectileMobTarget,
 } from "../../shared/combat/projectileTypes";
 
-export function findClassroomProjectileHits(
+export function findClassroomProjectileHits<Mob extends ProjectileMobTarget>(
   query: ProjectileMapQuery & {
     classroomRoot: THREE.Object3D | null;
     students: THREE.Object3D[];
     deadStudents: ReadonlySet<THREE.Object3D>;
+    matryoshkaMobs: Mob[];
   },
-): ProjectileMapHits {
+): ProjectileMapHits<Mob> {
   const { raycaster } = query;
   const surface = query.classroomRoot
     ? raycaster
@@ -28,5 +30,15 @@ export function findClassroomProjectileHits(
     classroomStudent = { student, hit };
   }
 
-  return { surface, classroomStudent };
+  let matryoshka: ProjectileMapHits<Mob>["matryoshka"];
+  for (const mob of query.matryoshkaMobs) {
+    if (mob.knockedDownAt > 0) continue;
+    mob.object.updateWorldMatrix(true, true);
+    const hit = raycaster.intersectObject(mob.object, true)[0];
+    if (!hit || (matryoshka && hit.distance >= matryoshka.hit.distance))
+      continue;
+    matryoshka = { mob, hit };
+  }
+
+  return { surface, classroomStudent, matryoshka };
 }

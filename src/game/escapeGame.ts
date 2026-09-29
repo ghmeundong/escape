@@ -34,6 +34,8 @@ import { prepareParkingLotScene } from "./maps/parkingLot/parkingLotScene";
 import { prepareStoreScene } from "./maps/store/storeScene";
 import { prepareClassroomScene } from "./maps/classroom/classroomScene";
 import { placeClassroomStudents } from "./maps/classroom/classroomStudents";
+import { findClassroomTeacherClonePosition } from "./maps/classroom/classroomTeacherClonePlacement";
+import { findParkingLotClonePosition } from "./maps/parkingLot/matryoshkaClonePlacement";
 import { findMapProjectileHits } from "./shared/combat/mapProjectileCollision";
 import "../style.css";
 
@@ -890,6 +892,10 @@ type MatryoshkaMob = {
   state: MatryoshkaMobState;
   soundSource: MatryoshkaSoundSource;
   isClone: boolean;
+  cooldownScale: number;
+  classroomTurned: boolean;
+  classroomTurnUntil: number;
+  classroomNextTurnAt: number;
   patrolDestination: THREE.Vector3 | null;
   physicsBody: RAPIER.RigidBody;
   physicsOffsetY: number;
@@ -2030,40 +2036,47 @@ function knockDownMatryoshkaMob(
   );
 }
 
-function createMatryoshkaClone(sourceMob: MatryoshkaMob): void {
+function createParkingLotMatryoshkaClone(sourceMob: MatryoshkaMob): void {
+  const spawnPosition = findParkingLotClonePosition({
+    source: sourceMob.object,
+    existing: matryoshkaMobs.map((mob) => mob.object),
+    overlapsVehicle: (x, z) =>
+      overlapsMatryoshkaVehicleObstacle(x, z, matryoshkaObstaclePadding),
+    getGround: getMatryoshkaGroundHit,
+  });
+  createMatryoshkaCloneObject(sourceMob, spawnPosition, false);
+}
+
+function createClassroomTeacherClone(sourceMob: MatryoshkaMob): void {
+  sourceMob.object.updateMatrixWorld(true);
+  const sourcePosition = sourceMob.object.getWorldPosition(new THREE.Vector3());
+  const sourceFloorY = new THREE.Box3()
+    .setFromObject(sourceMob.object)
+    .min.y;
+  const spawnPosition = findClassroomTeacherClonePosition({
+    sourcePosition,
+    floorY: sourceFloorY,
+    bounds: classroomBounds,
+    existingPositions: matryoshkaMobs.map(
+      (mob) => mob.object.getWorldPosition(new THREE.Vector3()),
+    ),
+    routeSide: sourceMob.routeSide,
+  });
+  createMatryoshkaCloneObject(sourceMob, spawnPosition, true);
+}
+
+function createMatryoshkaCloneObject(
+  sourceMob: MatryoshkaMob,
+  spawnPosition: THREE.Vector3,
+  classroomOnly: boolean,
+): void {
   const cloneObject = sourceMob.object.clone(true);
   cloneObject.scale.multiplyScalar(0.8);
   cloneObject.rotation.set(0, sourceMob.object.rotation.y, 0);
-  const candidateOffsets = [
-    new THREE.Vector3(4, 0, 0),
-    new THREE.Vector3(-4, 0, 0),
-    new THREE.Vector3(0, 0, 4),
-    new THREE.Vector3(0, 0, -4),
-  ];
-  let spawnPosition = sourceMob.object.position.clone();
-  for (const offset of candidateOffsets) {
-    const candidate = sourceMob.object.position.clone().add(offset);
-    if (
-      overlapsMatryoshkaVehicleObstacle(
-        candidate.x,
-        candidate.z,
-        matryoshkaObstaclePadding,
-      )
-    )
-      continue;
-    if (
-      matryoshkaMobs.some(
-        (mob) =>
-          mob !== sourceMob &&
-          mob.object.position.distanceToSquared(candidate) < 6.25,
-      )
-    )
-      continue;
-    const ground = getMatryoshkaGroundHit(candidate.x, candidate.z);
-    if (!ground) continue;
-    spawnPosition = new THREE.Vector3(candidate.x, ground.point.y, candidate.z);
-    break;
-  }
+  cloneObject.visible = true;
+  cloneObject.traverse((object) => {
+    object.visible = true;
+  });
   cloneObject.position.set(spawnPosition.x, 0, spawnPosition.z);
   cloneObject.updateMatrixWorld(true);
   const cloneBounds = new THREE.Box3().setFromObject(cloneObject);
@@ -2106,8 +2119,14 @@ function createMatryoshkaClone(sourceMob: MatryoshkaMob): void {
     object: cloneObject,
     state: sourceMob.state,
     soundSource: sourceMob.soundSource,
-    classroomOnly: false,
+    classroomOnly,
     isClone: true,
+    cooldownScale: classroomOnly ? 1 / 1.5 : 1,
+    classroomTurned: false,
+    classroomTurnUntil: -Infinity,
+    classroomNextTurnAt:
+      performance.now() / 1000 +
+      classroomTeacherTurnDelayMin * (classroomOnly ? 1 / 1.5 : 1),
     patrolDestination: null,
     physicsBody: clonePhysics.body,
     physicsOffsetY: clonePhysics.offsetY,
@@ -2138,14 +2157,19 @@ function createMatryoshkaClone(sourceMob: MatryoshkaMob): void {
 }
 
 function recoverMatryoshkaMob(mob: MatryoshkaMob): void {
-  syncMatryoshkaFromPhysics(mob);
+  if (!mob.classroomOnly) syncMatryoshkaFromPhysics(mob);
   mob.physicsBody.setGravityScale(0, true);
   mob.physicsBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
   mob.physicsBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
   mob.knockedDownAt = 0;
-  mob.object.rotation.x = 0;
-  mob.object.rotation.z = 0;
-  mob.object.position.y = mob.knockdownBaseY;
+  if (mob.classroomOnly) {
+    mob.object.position.copy(mob.initialPosition);
+    mob.object.quaternion.copy(mob.initialQuaternion);
+  } else {
+    mob.object.rotation.x = 0;
+    mob.object.rotation.z = 0;
+    mob.object.position.y = mob.knockdownBaseY;
+  }
   mob.object.updateMatrixWorld(true);
   const uprightQuaternion = mob.object.quaternion.clone();
   mob.physicsBody.setTranslation(
@@ -2167,8 +2191,68 @@ function recoverMatryoshkaMob(mob: MatryoshkaMob): void {
   );
   mob.stationaryTime = 0;
   mob.pathRefreshAt = 0;
-  createMatryoshkaClone(mob);
+  mob.classroomTurned = false;
+  mob.classroomTurnUntil = -Infinity;
+  mob.classroomNextTurnAt =
+    performance.now() / 1000 + classroomTeacherTurnDelayMin * mob.cooldownScale;
+  if (mob.classroomOnly) createClassroomTeacherClone(mob);
+  else createParkingLotMatryoshkaClone(mob);
   chooseMatryoshkaTarget(mob);
+}
+
+function updateClassroomTeacherClone(
+  mob: MatryoshkaMob,
+  now: number,
+): void {
+  if (!mob.classroomTurned && now >= mob.classroomNextTurnAt) {
+    mob.object.quaternion.copy(mob.initialQuaternion);
+    mob.object.rotateY(Math.PI);
+    mob.classroomTurned = true;
+    mob.classroomTurnUntil =
+      now +
+      (classroomTeacherLookDurationMin +
+        Math.random() *
+          (classroomTeacherLookDurationMax - classroomTeacherLookDurationMin)) *
+        mob.cooldownScale;
+    return;
+  }
+  if (mob.classroomTurned && now >= mob.classroomTurnUntil) {
+    mob.object.quaternion.copy(mob.initialQuaternion);
+    mob.classroomTurned = false;
+    mob.classroomNextTurnAt =
+      now +
+      (classroomTeacherTurnDelayMin +
+        Math.random() *
+          (classroomTeacherTurnDelayMax - classroomTeacherTurnDelayMin)) *
+        mob.cooldownScale;
+  }
+}
+
+function checkClassroomTeacherDanger(
+  teacher: MatryoshkaMob,
+  turned: boolean,
+  now: number,
+): void {
+  if (!turned || playerDeathActive || classroomContactDeathPending) return;
+  const teacherWorldPosition = teacher.object.getWorldPosition(
+    new THREE.Vector3(),
+  );
+  const cameraToTeacher = teacherWorldPosition
+    .clone()
+    .sub(camera.position)
+    .normalize();
+  const playerForward = camera.getWorldDirection(new THREE.Vector3());
+  const teacherScreenPosition = teacherWorldPosition.clone().project(camera);
+  const teacherIsOnScreen =
+    teacherScreenPosition.z >= 0 &&
+    teacherScreenPosition.z <= 1 &&
+    Math.abs(teacherScreenPosition.x) <= 1 &&
+    Math.abs(teacherScreenPosition.y) <= 1;
+  const playerIsLookingAtTeacher =
+    teacherIsOnScreen &&
+    playerForward.dot(cameraToTeacher) >= Math.cos(THREE.MathUtils.degToRad(45));
+  if (weaponDrawn || !classroomSeatActive || !playerIsLookingAtTeacher)
+    triggerClassroomDangerDeath(teacher, now);
 }
 
 function updateClassroomTeacher(now: number): void {
@@ -2238,28 +2322,7 @@ function updateClassroomTeacher(now: number): void {
     turnClassroomTeacherTowardPlayer(now);
   }
 
-  if (classroomTeacherTurned) {
-    const teacherWorldPosition = classroomTeacher.object.getWorldPosition(
-      new THREE.Vector3(),
-    );
-    const cameraToTeacher = teacherWorldPosition
-      .clone()
-      .sub(camera.position)
-      .normalize();
-    const playerForward = camera.getWorldDirection(new THREE.Vector3());
-    const teacherScreenPosition = teacherWorldPosition.clone().project(camera);
-    const teacherIsOnScreen =
-      teacherScreenPosition.z >= 0 &&
-      teacherScreenPosition.z <= 1 &&
-      Math.abs(teacherScreenPosition.x) <= 1 &&
-      Math.abs(teacherScreenPosition.y) <= 1;
-    const playerIsLookingAtTeacher =
-      teacherIsOnScreen &&
-      playerForward.dot(cameraToTeacher) >=
-        Math.cos(THREE.MathUtils.degToRad(45));
-    if (weaponDrawn || !classroomSeatActive || !playerIsLookingAtTeacher)
-      triggerClassroomDangerDeath(classroomTeacher, now);
-  }
+  checkClassroomTeacherDanger(classroomTeacher, classroomTeacherTurned, now);
 }
 
 function updateMatryoshkaMobs(now: number, delta: number): void {
@@ -2274,7 +2337,22 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
   if (_isInClassroom) {
     updateClassroomBell(now);
     updateClassroomTeacher(now);
-    matryoshkaMobs.forEach((mob) => mob.velocity.set(0, 0, 0));
+    matryoshkaMobs.forEach((mob) => {
+      mob.velocity.set(0, 0, 0);
+      if (
+        mob.classroomOnly &&
+        mob !== classroomTeacher &&
+        mob.knockedDownAt <= 0 &&
+        classroomTeacher
+      ) {
+        updateClassroomTeacherClone(mob, now);
+        if (!teacherAiSetting.checked)
+          checkClassroomTeacherDanger(mob, mob.classroomTurned, now);
+      }
+      if (mob.knockedDownAt <= 0) return;
+      syncMatryoshkaFromPhysics(mob);
+      if (now - mob.knockedDownAt >= 3) recoverMatryoshkaMob(mob);
+    });
     return;
   }
   if (!parkingLotRoot || matryoshkaWaypoints.length === 0) return;
@@ -2335,7 +2413,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
       mob.playerVisible =
         playerInRedRange ||
         matryoshkaHasLineOfSight(mob.object, camera.position);
-      mob.visibilityCheckAt = now + 0.1;
+      mob.visibilityCheckAt = now + 0.1 * mob.cooldownScale;
     }
     const playerVisible = playerInRedRange || mob.playerVisible;
     if (playerVisible) mob.lastSeenPlayerPosition.copy(camera.position);
@@ -2405,10 +2483,12 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
     if (targetHorizontalDistanceSquared < 4 && mob.route.length > 1) {
       mob.route.shift();
       mob.target.copy(mob.route[0]);
-      mob.pathRefreshAt = now + matryoshkaPathRefreshInterval;
+      mob.pathRefreshAt =
+        now + matryoshkaPathRefreshInterval * mob.cooldownScale;
     } else if (mob.route.length === 0 || targetHorizontalDistanceSquared < 4) {
       chooseMatryoshkaTarget(mob);
-      mob.pathRefreshAt = now + matryoshkaPathRefreshInterval;
+      mob.pathRefreshAt =
+        now + matryoshkaPathRefreshInterval * mob.cooldownScale;
     }
     ensureMatryoshkaWanderMovement(mob);
     matryoshkaMoveDirection.subVectors(mob.target, matryoshkaMobPosition);
@@ -2452,7 +2532,8 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
       }
       mob.velocity.set(0, 0, 0);
       mob.stationaryTime = 0;
-      mob.pathRefreshAt = now + matryoshkaPathRefreshInterval;
+      mob.pathRefreshAt =
+        now + matryoshkaPathRefreshInterval * mob.cooldownScale;
     }
   }
   fearActive = parkingLotFearActive;
@@ -2552,7 +2633,12 @@ function spawnMatryoshkaMob(
       );
       visionIndicator.renderOrder = 1005;
       visionIndicator.frustumCulled = false;
-      visionIndicator.visible = matryoshkaVisionSetting.checked;
+      const mobVisible = classroomOnly
+        ? _isInClassroom
+        : !_isInStore && !_isInClassroom;
+      mobObject.visible = mobVisible;
+      visionIndicator.visible = mobVisible && matryoshkaVisionSetting.checked;
+      matryoshkaHitboxHelper.visible = mobVisible && matryoshkaHitboxSetting.checked;
       scene.add(mobObject, visionIndicator, matryoshkaHitboxHelper);
       const mob: MatryoshkaMob = {
         object: mobObject,
@@ -2560,6 +2646,10 @@ function spawnMatryoshkaMob(
         soundSource: "player",
         classroomOnly,
         isClone: false,
+        cooldownScale: 1,
+        classroomTurned: false,
+        classroomTurnUntil: -Infinity,
+        classroomNextTurnAt: -Infinity,
         patrolDestination: null,
         physicsBody: physics.body,
         physicsOffsetY: physics.offsetY,
@@ -4518,6 +4608,7 @@ masterVolumeSetting.addEventListener("input", () => {
 
 function getMuzzleWorldPosition(): THREE.Vector3 {
   camera.updateWorldMatrix(true, true);
+  muzzleLocalPosition.set(0, 0.12, 0);
   return modelMuzzle.localToWorld(muzzleLocalPosition.clone());
 }
 
@@ -5283,6 +5374,9 @@ function sitAtClassroomSeat(force = false): void {
       student.quaternion.copy(initialRotation);
     }
   });
+  playerSprintActive = false;
+  keys.delete("ShiftLeft");
+  keys.delete("ShiftRight");
   classroomStudentKnockdownUntil.clear();
   classroomStudentsAlerted = false;
   classroomTeacherStudentTurnAt = -Infinity;
@@ -5421,6 +5515,7 @@ function collectWeaponPickup(): void {
 function setWeaponDrawn(drawn: boolean): void {
   if (!weaponPickupCollected || trueCarEntered) return;
   if (drawn) {
+    if (weaponDrawn && !weaponHolstering) return;
     weaponHolstering = false;
     weaponRaising = true;
     weaponDrawn = true;
@@ -7406,8 +7501,6 @@ function render(): void {
       verticalVelocity = 0;
       isGrounded = true;
     }
-  } else if (controls.isLocked && classroomSeatActive) {
-    updatePlayerStamina(delta);
   }
   if (trueCarEntered) updateTrueCarSeatPosition();
   else resolveParkingCollision();
@@ -7443,6 +7536,7 @@ function render(): void {
   const isMoving = controls.isLocked && direction.lengthSq() > 0;
   const isRunning =
     isMoving &&
+    !classroomSeatActive &&
     keys.has("KeyW") &&
     !weaponReloading &&
     (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&

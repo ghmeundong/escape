@@ -42,10 +42,12 @@ export function findMapProjectileHits<Mob extends ProjectileMobTarget>(params: {
       classroomRoot: params.classroomRoot,
       students: params.classroomStudents,
       deadStudents: params.deadStudents,
+      matryoshkaMobs: params.matryoshkaMobs,
     });
     return {
       surface: hits.surface,
       classroomStudent: hits.classroomStudent,
+      matryoshka: hits.matryoshka,
     };
   }
 
