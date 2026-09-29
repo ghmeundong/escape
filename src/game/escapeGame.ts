@@ -4,29 +4,37 @@ import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { getStoredEpisodeId, type EpisodeId } from "./episodes";
-import { startEpisode, restoreEpisodeVisibility } from "./episodeFlow";
+import { getStoredEpisodeId, type EpisodeId } from "./episodes/episodes";
+import {
+  startEpisode,
+  restoreEpisodeVisibility,
+} from "./episodes/episodeFlow";
 import {
   bindSettingsPersistence,
   restoreSettings,
   settingsStorageKey,
-} from "./settings";
+} from "./shared/settings/settings";
 import {
   createSharedPhysicsWorld,
   createWeaponRig,
   tickPlayerStaminaRuntime,
-} from "./commonRuntime";
+} from "./shared/runtime/commonRuntime";
 import {
   setupEpisodePreviewScenes,
   setupMatryoshkaPreview,
-} from "./sceneBootstrap";
-import { bindEpisodeSelection, bindScreenFlow } from "./ui";
-import { createEpisodeEntryController } from "./episodeRuntime";
+} from "./shared/rendering/sceneBootstrap";
+import { bindEpisodeSelection, bindScreenFlow } from "./shared/ui/ui";
+import { createEpisodeEntryController } from "./episodes/episodeRuntime";
 import {
   findNearestWaypoint,
   findRoute,
   getRouteDistance,
-} from "./matryoshkaNavigation";
+} from "./maps/parkingLot/matryoshkaNavigation";
+import { prepareParkingLotScene } from "./maps/parkingLot/parkingLotScene";
+import { prepareStoreScene } from "./maps/store/storeScene";
+import { prepareClassroomScene } from "./maps/classroom/classroomScene";
+import { placeClassroomStudents } from "./maps/classroom/classroomStudents";
+import { findMapProjectileHits } from "./shared/combat/mapProjectileCollision";
 import "../style.css";
 
 declare global {
@@ -675,6 +683,14 @@ const mapPointToggleLabel = document.createElement("label");
 mapPointToggleLabel.className = "toggle-row";
 mapPointToggleLabel.textContent = "PLACE MAP POINTS WITH CLICK ";
 mapPointToggleLabel.append(mapPointSetting);
+const projectileHitLogSetting = document.createElement("input");
+projectileHitLogSetting.id = "projectile-hit-log-setting";
+projectileHitLogSetting.type = "checkbox";
+projectileHitLogSetting.checked = false;
+const projectileHitLogToggleLabel = document.createElement("label");
+projectileHitLogToggleLabel.className = "toggle-row";
+projectileHitLogToggleLabel.textContent = "PROJECTILE HIT LOG ";
+projectileHitLogToggleLabel.append(projectileHitLogSetting);
 const developerTestGroup = document.createElement("div");
 developerTestGroup.className = "developer-test-group";
 developerTestGroup.innerHTML = "<h2>DEVELOPER TEST OPTIONS</h2>";
@@ -687,6 +703,7 @@ developerTestGroup.append(
   matryoshkaVisionToggleLabel,
   teacherAiToggleLabel,
   mapPointToggleLabel,
+  projectileHitLogToggleLabel,
 );
 const developerCategoryButton = document.createElement("button");
 developerCategoryButton.className = "settings-category";
@@ -2978,58 +2995,11 @@ showLoadingScreen("LOADING OBJECTS...", 12);
 parkingLotLoader.load(
   parkingLotUrl,
   (parkingLot) => {
-    parkingLot.updateMatrixWorld(true);
-    const bounds = new THREE.Box3().setFromObject(parkingLot);
-    const size = bounds.getSize(new THREE.Vector3());
-    const scale = 180 / Math.max(size.x, size.z, 1);
-    parkingLot.scale.setScalar(scale);
-    parkingLot.updateMatrixWorld(true);
-    const scaledBounds = new THREE.Box3().setFromObject(parkingLot);
-    const center = scaledBounds.getCenter(new THREE.Vector3());
-    parkingLot.position.x -= center.x;
-    parkingLot.position.z -= center.z;
-    parkingLot.position.y -= scaledBounds.min.y;
-    parkingLot.updateMatrixWorld(true);
-    parkingLot.traverse((object) => {
-      if (object instanceof THREE.Light) {
-        object.visible = false;
-      }
-      if (object instanceof THREE.Mesh) {
-        object.castShadow = false;
-        object.receiveShadow = false;
-        if (isCollisionSurface(object)) {
-          const obstacleBounds = new THREE.Box3().setFromObject(object);
-          const obstacleSize = obstacleBounds.getSize(new THREE.Vector3());
-          if (
-            obstacleSize.y >= 3 &&
-            obstacleSize.y <= 8 &&
-            obstacleSize.x > 0.2 &&
-            obstacleSize.z > 0.2
-          ) {
-            addParkingObstacle(obstacleBounds);
-          }
-        }
-        const materials = Array.isArray(object.material)
-          ? object.material
-          : [object.material];
-        materials.forEach((material) => {
-          if ("color" in material)
-            (material as { color: THREE.Color }).color.multiplyScalar(0.35);
-          if (
-            material instanceof THREE.MeshStandardMaterial ||
-            material instanceof THREE.MeshPhysicalMaterial
-          ) {
-            material.metalness = 0;
-            material.roughness = 1;
-            material.envMapIntensity = 0;
-          }
-          if (material instanceof THREE.MeshPhongMaterial) {
-            material.shininess = 0;
-          }
-        });
-      }
-    });
-    parkingBounds = new THREE.Box3().setFromObject(parkingLot);
+    parkingBounds = prepareParkingLotScene(
+      parkingLot,
+      isCollisionSurface,
+      addParkingObstacle,
+    );
     parkingLotRoot = parkingLot;
     scene.add(parkingLot);
     showLoadingScreen("LOADING OBJECTS...", 36);
@@ -3371,72 +3341,21 @@ parkingLotLoader.load(
       classroomUrl,
       (gltf) => {
         const classroom = gltf.scene;
-        classroom.updateMatrixWorld(true);
-        const classroomBoundsBox = new THREE.Box3().setFromObject(classroom);
-        const classroomSize = classroomBoundsBox.getSize(new THREE.Vector3());
-        const classroomScale =
-          25 / Math.max(classroomSize.x, classroomSize.z, 1);
-        classroom.scale.setScalar(classroomScale);
-        classroom.updateMatrixWorld(true);
-
-        const scaledClassroomBounds = new THREE.Box3().setFromObject(classroom);
-        const classroomCenter = scaledClassroomBounds.getCenter(
-          new THREE.Vector3(),
+        const classroomSetup = prepareClassroomScene(
+          classroom,
+          scene,
+          classroomLightRig,
+          playerHeight,
+          isCollisionSurface,
         );
-        classroom.position.x = -classroomCenter.x;
-        classroom.position.z = -classroomCenter.z;
-        classroom.position.y -= scaledClassroomBounds.min.y;
-        classroom.updateMatrixWorld(true);
-
         classroomObstacles.length = 0;
-        classroom.traverse((object) => {
-          if (!isCollisionSurface(object)) return;
-          const objectBounds = new THREE.Box3().setFromObject(object);
-          const objectSize = objectBounds.getSize(new THREE.Vector3());
-          if (
-            objectSize.x < 0.2 ||
-            objectSize.z < 0.2 ||
-            objectSize.y < 0.25 ||
-            objectSize.y > 5.5
-          )
-            return;
-          classroomObstacles.push(objectBounds);
-        });
+        classroomObstacles.push(...classroomSetup.obstacles);
 
         classroomRoot = classroom;
-        classroomBounds = new THREE.Box3().setFromObject(classroom);
-        const classroomFloorY = classroomBounds.min.y;
-        const classroomWorldCenter = classroomBounds.getCenter(
-          new THREE.Vector3(),
-        );
-        const classroomMatryoshkaSpawn = new THREE.Vector3(4.081, 0.125, 9.398);
-        spawnMatryoshkaMob(classroomMatryoshkaSpawn, true);
-        classroomSpawnPosition.set(
-          classroomWorldCenter.x,
-          classroomFloorY + playerHeight,
-          classroomWorldCenter.z,
-        );
-        const classroomEntrySize = classroomBounds.getSize(new THREE.Vector3());
-        classroomEntryPosition.set(
-          classroomBounds.min.x + Math.min(1.2, classroomEntrySize.x * 0.12),
-          classroomFloorY + playerHeight,
-          (classroomBounds.min.z + classroomBounds.max.z) * 0.5,
-        );
-        const classroomHemisphereLight = new THREE.HemisphereLight(
-          "#edf5ff",
-          "#181d25",
-          1.3,
-        );
-        const classroomKeyLight = new THREE.DirectionalLight("#fff2d8", 1.8);
-        classroomKeyLight.position.set(-80, 120, 90);
-        classroomKeyLight.target.position.set(0, 0, 0);
-        classroomLightRig.add(
-          classroomHemisphereLight,
-          classroomKeyLight,
-          classroomKeyLight.target,
-        );
-        classroom.visible = false;
-        scene.add(classroom);
+        classroomBounds = classroomSetup.bounds;
+        classroomSpawnPosition.copy(classroomSetup.spawnPosition);
+        classroomEntryPosition.copy(classroomSetup.entryPosition);
+        spawnMatryoshkaMob(classroomSetup.matryoshkaSpawn, true);
 
         const studentLoader = new FBXLoader();
         const studentUrl = new URL(
@@ -3459,50 +3378,18 @@ parkingLotLoader.load(
                   color: "#ffffff",
                   roughness: 0.72,
                   metalness: 0,
+                  side: THREE.DoubleSide,
                 });
               }
             });
-            const studentPositions = [
-              [1.445, 2.36, 1.928],
-              [-0.425, 2.36, 1.93],
-              [-4.333, 2.36, 1.852],
-              [-5.877, 2.36, 1.882],
-              [-5.924, 2.36, -0.763],
-              [-4.358, 2.36, -0.867],
-              [-0.366, 2.36, -0.752],
-              [4.986, 2.36, -0.675],
-              [6.602, 2.36, -0.814],
-              [6.642, 2.36, -3.559],
-              [4.759, 2.36, -3.516],
-              [1.462, 2.36, -4.129],
-              [-0.277, 2.36, -4.372],
-              [-4.225, 2.36, -3.47],
-              [-5.92, 2.36, -3.581],
-              [-6.078, 2.36, -6.334],
-              [-4.069, 2.36, -6.291],
-              [-0.444, 2.36, -6.45],
-              [1.221, 2.36, -6.554],
-              [4.77, 2.36, -6.105],
-              [6.4, 2.36, -5.906],
-              [6.469, 2.36, -8.982],
-              [4.813, 2.36, -8.965],
-              [1.541, 2.36, -8.937],
-              [-0.345, 2.36, -8.933],
-              [-4.448, 2.36, -8.863],
-              [-6.189, 2.36, -8.731],
-              [6.766, 2.36, 1.963],
-              [5.091, 2.36, 1.924],
-            ];
-            studentPositions.forEach(([x, y, z]) => {
-              const studentClone = student.clone(true);
-              studentClone.position.set(x, y, z);
-              studentClone.visible = _isInClassroom;
-              classroomStudents.push(studentClone);
-              classroomStudentInitialRotations.set(
-                studentClone,
-                studentClone.quaternion.clone(),
-              );
-              scene.add(studentClone);
+            const placement = placeClassroomStudents(
+              student,
+              scene,
+              _isInClassroom,
+            );
+            classroomStudents.push(...placement.students);
+            placement.initialRotations.forEach((rotation, studentObject) => {
+              classroomStudentInitialRotations.set(studentObject, rotation);
             });
           },
           undefined,
@@ -3524,49 +3411,15 @@ parkingLotLoader.load(
       storeUrl,
       (gltf) => {
         const store = gltf.scene;
-        store.updateMatrixWorld(true);
-        const storeBoundsBox = new THREE.Box3().setFromObject(store);
-        const storeSize = storeBoundsBox.getSize(new THREE.Vector3());
-        const storeScale = 500 / Math.max(storeSize.x, storeSize.z, 1);
-        store.scale.setScalar(storeScale);
-        store.updateMatrixWorld(true);
-
-        const scaledStoreBounds = new THREE.Box3().setFromObject(store);
-        const storeCenter = scaledStoreBounds.getCenter(new THREE.Vector3());
-        store.position.x = -storeCenter.x;
-        store.position.z = -storeCenter.z;
-        store.position.y -= scaledStoreBounds.min.y;
-        store.updateMatrixWorld(true);
-
+        const storeSetup = prepareStoreScene(
+          store,
+          storeLightRig,
+          playerHeight,
+        );
         storeRoot = store;
-        storeBounds = new THREE.Box3().setFromObject(store);
-        const storeFloorY = storeBounds.min.y;
-        const storeWorldCenter = storeBounds.getCenter(new THREE.Vector3());
-        storeSpawnPosition.set(
-          storeWorldCenter.x,
-          storeFloorY + playerHeight,
-          storeWorldCenter.z,
-        );
-        const storeEntrySize = storeBounds.getSize(new THREE.Vector3());
-        storeEntryPosition.set(
-          storeBounds.min.x + Math.min(1.2, storeEntrySize.x * 0.12),
-          storeFloorY + playerHeight,
-          (storeBounds.min.z + storeBounds.max.z) * 0.5,
-        );
-        const storeHemisphereLight = new THREE.HemisphereLight(
-          "#f2f5ff",
-          "#1b2028",
-          1.4,
-        );
-        const storeKeyLight = new THREE.DirectionalLight("#fff8e8", 2.2);
-        storeKeyLight.position.set(-120, 240, 150);
-        storeKeyLight.target.position.set(0, 0, 0);
-        storeLightRig.add(
-          storeHemisphereLight,
-          storeKeyLight,
-          storeKeyLight.target,
-        );
-        store.visible = false;
+        storeBounds = storeSetup.bounds;
+        storeSpawnPosition.copy(storeSetup.spawnPosition);
+        storeEntryPosition.copy(storeSetup.entryPosition);
 
         const keyLoader = new GLTFLoader();
         const keyUrl = new URL(
@@ -4664,6 +4517,7 @@ masterVolumeSetting.addEventListener("input", () => {
 });
 
 function getMuzzleWorldPosition(): THREE.Vector3 {
+  camera.updateWorldMatrix(true, true);
   return modelMuzzle.localToWorld(muzzleLocalPosition.clone());
 }
 
@@ -7032,8 +6886,11 @@ const projectileGeometry = new THREE.SphereGeometry(0.035, 8, 8);
 const projectileRadius = 0.035;
 const projectileLifetime = 3;
 
-function spawnProjectile(direction: THREE.Vector3): void {
-  shotOrigin.copy(getMuzzleWorldPosition());
+function spawnProjectile(
+  direction: THREE.Vector3,
+  muzzleWorldPosition: THREE.Vector3,
+): void {
+  shotOrigin.copy(muzzleWorldPosition);
   const muzzleVelocity = projectileVelocity;
   const bodyDescription = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(shotOrigin.x, shotOrigin.y, shotOrigin.z)
@@ -7092,77 +6949,75 @@ function updateProjectiles(now: number, delta: number): void {
       .clone()
       .sub(projectile.previousPosition);
     const travelDistance = projectileTravel.length();
-    let parkingSurfaceHit: THREE.Intersection<THREE.Object3D> | undefined;
-    let matryoshkaHit:
-      | { mob: MatryoshkaMob; hit: THREE.Intersection<THREE.Object3D> }
-      | undefined;
-    let classroomStudentHit:
-      | { student: THREE.Object3D; hit: THREE.Intersection<THREE.Object3D> }
-      | undefined;
-    if (travelDistance > 0) {
-      parkingProjectileRaycaster.set(
-        projectile.previousPosition,
-        projectileTravel.normalize(),
-      );
-      parkingProjectileRaycaster.far = travelDistance + projectileRadius;
-      const activeProjectileRoot = _isInClassroom
-        ? classroomRoot
-        : _isInStore
-          ? storeRoot
-          : parkingLotRoot;
-      const parkingLotHit = activeProjectileRoot
-        ? parkingProjectileRaycaster.intersectObject(
-            activeProjectileRoot,
-            true,
-          )[0]
-        : undefined;
-      const parkedCarHit =
-        parkedCars.length > 0
-          ? parkingProjectileRaycaster.intersectObjects(parkedCars, true)[0]
-          : undefined;
-      const candidateHits = [parkingLotHit, parkedCarHit].filter(
-        (hit): hit is THREE.Intersection<THREE.Object3D> => Boolean(hit),
-      );
-      parkingSurfaceHit = candidateHits.sort(
-        (a, b) => a.distance - b.distance,
-      )[0];
-      if (!_isInClassroom && !_isInStore) {
-        for (const mob of matryoshkaMobs) {
-          if (mob.knockedDownAt > 0) continue;
-          const mobHit = parkingProjectileRaycaster.intersectObject(
-            mob.object,
-            true,
-          )[0];
-          if (
-            mobHit &&
-            (!matryoshkaHit || mobHit.distance < matryoshkaHit.hit.distance)
-          )
-            matryoshkaHit = { mob, hit: mobHit };
-        }
-      }
-      if (_isInClassroom) {
-        for (const student of classroomStudents) {
-          if (classroomStudentKnockdownUntil.has(student)) continue;
-          const studentHit = parkingProjectileRaycaster.intersectObject(
-            student,
-            true,
-          )[0];
-          if (
-            studentHit &&
-            (!classroomStudentHit ||
-              studentHit.distance < classroomStudentHit.hit.distance)
-          )
-            classroomStudentHit = { student, hit: studentHit };
-        }
-      }
-    }
+    const projectileHits =
+      travelDistance > 0
+        ? findMapProjectileHits({
+            episodeId: _isInClassroom
+              ? "classroom"
+              : _isInStore
+                ? "store"
+                : "parking-lot",
+            raycaster: parkingProjectileRaycaster,
+            origin: projectile.previousPosition,
+            direction: projectileTravel.normalize(),
+            maxDistance: travelDistance,
+            projectileRadius,
+            parkingLotRoot,
+            classroomRoot,
+            storeRoot,
+            parkedCars,
+            matryoshkaMobs,
+            classroomStudents,
+            deadStudents: classroomDeadStudents,
+            isCollisionSurface,
+          })
+        : {};
+    const parkingSurfaceHit = projectileHits.surface;
+    const matryoshkaHit = projectileHits.matryoshka;
+    const classroomStudentHit = projectileHits.classroomStudent;
     projectile.previousPosition.copy(projectilePosition);
     const hitFloor = translation.y <= projectileRadius + 0.01;
-    if (
+    const classroomStudentAccepted = Boolean(
       classroomStudentHit &&
       (!parkingSurfaceHit ||
         classroomStudentHit.hit.distance <= parkingSurfaceHit.distance)
+    );
+    const projectileExpired = now - projectile.bornAt > projectileLifetime;
+    if (
+      projectileHitLogSetting.checked &&
+      _isInClassroom &&
+      (classroomStudentAccepted || parkingSurfaceHit || hitFloor || projectileExpired)
     ) {
+      if (classroomStudentAccepted && classroomStudentHit) {
+        console.info("[Projectile hit] classroom student", {
+          studentPosition: classroomStudentHit.student.position.toArray(),
+          mesh: classroomStudentHit.hit.object.name || classroomStudentHit.hit.object.type,
+          impactPosition: classroomStudentHit.hit.point.toArray(),
+          distance: classroomStudentHit.hit.distance,
+        });
+      } else if (parkingSurfaceHit) {
+        console.info("[Projectile blocked] classroom surface", {
+          surface: parkingSurfaceHit.object.name || parkingSurfaceHit.object.type,
+          impactPosition: parkingSurfaceHit.point.toArray(),
+          distance: parkingSurfaceHit.distance,
+          studentCandidate: classroomStudentHit
+            ? {
+                position: classroomStudentHit.student.position.toArray(),
+                distance: classroomStudentHit.hit.distance,
+              }
+            : null,
+        });
+      } else if (hitFloor) {
+        console.info("[Projectile ended] floor", {
+          position: projectilePosition.toArray(),
+        });
+      } else if (projectileExpired) {
+        console.info("[Projectile missed] lifetime expired", {
+          position: projectilePosition.toArray(),
+        });
+      }
+    }
+    if (classroomStudentAccepted && classroomStudentHit) {
       const impactNormal = classroomStudentHit.hit.face
         ? classroomStudentHit.hit.face.normal
             .clone()
@@ -7231,7 +7086,7 @@ function updateProjectiles(now: number, delta: number): void {
       matryoshkaHit ||
       parkingSurfaceHit ||
       hitFloor ||
-      now - projectile.bornAt > projectileLifetime
+      projectileExpired
     ) {
       physicsWorld.removeRigidBody(projectile.body);
       scene.remove(projectile.mesh);
@@ -7453,7 +7308,7 @@ function fireShot(): void {
   aimPoint.addScaledVector(cameraRight, horizontalSpread);
   aimPoint.addScaledVector(cameraUp, verticalSpread);
   shotDirection.copy(aimPoint).sub(shotOrigin).normalize();
-  spawnProjectile(shotDirection);
+  spawnProjectile(shotDirection, shotOrigin);
 }
 
 function resizeRenderer(): void {
