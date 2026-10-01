@@ -70,3 +70,71 @@ export function bindEpisodeSelection(
   );
   chessEpisodeButton.addEventListener("click", () => startEpisode("chess"));
 }
+
+export function bindPauseMenuControls(params: {
+  startScreen: HTMLElement;
+  episodeScreen: HTMLElement;
+  settingsButton: HTMLButtonElement;
+  settingsClose: HTMLButtonElement;
+  settingsOverlay: HTMLElement;
+  menuSettingsButton: HTMLButtonElement;
+  menuExitButton: HTMLButtonElement;
+  fullscreenButton: HTMLButtonElement;
+  showSettings: () => void;
+  openMenu: () => void;
+  closeMenu: () => void;
+  isGameplayStarted: () => boolean;
+  lockPointer: () => void;
+  exitApplication: () => void;
+  returnToEpisodeSelect: () => void;
+  toggleFullscreen: () => Promise<void>;
+}): void {
+  const {
+    startScreen,
+    episodeScreen,
+    settingsButton,
+    settingsClose,
+    settingsOverlay,
+    menuSettingsButton,
+    menuExitButton,
+    fullscreenButton,
+    showSettings,
+    openMenu,
+    closeMenu,
+    isGameplayStarted,
+    lockPointer,
+    exitApplication,
+    returnToEpisodeSelect,
+    toggleFullscreen,
+  } = params;
+
+  settingsButton.addEventListener("click", () => {
+    if (
+      startScreen.classList.contains("is-visible") ||
+      episodeScreen.classList.contains("is-visible")
+    ) {
+      showSettings();
+      settingsOverlay.classList.add("is-open");
+      settingsOverlay.setAttribute("aria-hidden", "false");
+    } else openMenu();
+  });
+  settingsClose.addEventListener("click", () => {
+    const isInGameplay =
+      isGameplayStarted() &&
+      !startScreen.classList.contains("is-visible") &&
+      !episodeScreen.classList.contains("is-visible");
+    closeMenu();
+    if (isInGameplay) lockPointer();
+  });
+  menuSettingsButton.addEventListener("click", showSettings);
+  menuExitButton.addEventListener("click", () => {
+    if (startScreen.classList.contains("is-visible")) exitApplication();
+    else returnToEpisodeSelect();
+  });
+  settingsOverlay.addEventListener("click", (event) => {
+    if (event.target === settingsOverlay) settingsClose.click();
+  });
+  fullscreenButton.addEventListener("click", () => {
+    void toggleFullscreen();
+  });
+}

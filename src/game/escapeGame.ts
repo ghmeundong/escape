@@ -1,7 +1,6 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import { gsap } from "gsap";
 import * as THREE from "three";
-import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import {
@@ -16,17 +15,66 @@ import {
   settingsStorageKey,
 } from "./shared/settings/settings";
 import {
-  createSharedPhysicsWorld,
-  createWeaponRig,
   PLAYER_JUMP_STAMINA_COST,
   PLAYER_MAX_STAMINA,
   tickPlayerStaminaRuntime,
 } from "./shared/runtime/commonRuntime";
 import {
+  calculateRecoilStrength,
+  calculateShotDirection,
+  calculateShotSpread,
+  calculateSpreadPixels,
+  createWeaponRig,
+} from "./combat/weaponController";
+import { createSharedPhysicsWorld } from "./runtime/physicsWorld";
+import { calculateJumpMomentum } from "./runtime/playerMovement";
+import {
   setupEpisodePreviewScenes,
   setupMatryoshkaPreview,
 } from "./shared/rendering/sceneBootstrap";
-import { bindEpisodeSelection, bindScreenFlow } from "./shared/ui/ui";
+import {
+  bindEpisodeSelection,
+  bindPauseMenuControls,
+  bindScreenFlow,
+} from "./shared/ui/ui";
+import {
+  bindSettingsCategories,
+  bindSettingsPreviewEvents,
+  createSettingsPreviews,
+  settingPixelsToRem,
+  syncSizeSettingLabels,
+} from "./settings/settingsUI";
+import {
+  createHudOverlay,
+  renderClassroomDoorProgress,
+  renderInteractionPrompts,
+} from "./ui/hudOverlay";
+import {
+  bindKeyInputHandlers,
+  createKeyInputState,
+  handleEscapeHotkey,
+  handleInteractionHotkey,
+  handleWeaponHotkey,
+} from "./input/keyInput";
+import {
+  areAllClassroomStudentsWatching,
+  knockDownClassroomStudent as knockDownClassroomStudentRuntime,
+  updateClassroomStudentFacing,
+  updateClassroomTeacherCloneTurn,
+} from "./mobs/classroomTeacher";
+import {
+  chooseMatryoshkaTarget as chooseMatryoshkaMobTarget,
+  determineMatryoshkaMobState,
+  ensureMatryoshkaWanderMovement as ensureMatryoshkaMobWanderMovement,
+  getMatryoshkaHorizontalDistanceSquared,
+  knockDownMatryoshkaMob as knockDownMatryoshkaMobRuntime,
+  type MatryoshkaMobState,
+} from "./mobs/matryoshkaMob";
+import {
+  createPointerControls,
+  lockPointerControls,
+  setPointerSensitivity,
+} from "./input/pointerControls";
 import { createEpisodeEntryController } from "./episodes/episodeRuntime";
 import {
   findNearestWaypoint,
@@ -40,7 +88,22 @@ import { placeClassroomStudents } from "./maps/classroom/classroomStudents";
 import { findClassroomTeacherClonePosition } from "./maps/classroom/classroomTeacherClonePlacement";
 import { findParkingLotClonePosition } from "./maps/parkingLot/matryoshkaClonePlacement";
 import { findMapProjectileHits } from "./shared/combat/mapProjectileCollision";
-import "../style.css";
+import { gameState, type CurrentWeaponId } from "./runtime/gameState";
+import {
+  bindRendererResize,
+  resizeRenderer as resizeGameRenderer,
+  startGameLoop,
+} from "./runtime/gameLoop";
+import {
+  analyzeRunningFootsteps,
+  createBufferedSound,
+  detectCarBreakPeaks,
+  detectHeartbeatPeaks,
+  getMasterVolumeMultiplier,
+  loadSoundBuffer,
+  setMasterVolumePercent,
+} from "./audio/soundManager";
+import { mountAppShell } from "./ui/appShell";
 
 declare global {
   interface Window {
@@ -50,73 +113,10 @@ declare global {
   }
 }
 
-await RAPIER.init();
-
 if (window.electronAPI) document.documentElement.classList.add("electron-app");
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
-app.innerHTML = `
-  <main class="escape-app">
-    <section class="range-shell">
-      <div class="range" aria-label="Escape parking environment">
-      <section class="start-screen is-visible" aria-label="Start Escape">
-        <canvas id="matryoshka-preview-canvas" aria-label="Rotating Matryoshka preview"></canvas>
-        <div class="start-screen-content"><h1>ESCAPE</h1><button class="start-play-button" id="start-play-button" type="button">PLAY</button></div>
-      </section>
-      <section class="loading-screen" aria-live="polite" aria-label="Loading Escape">
-        <div class="loading-panel">
-          <span class="loading-kicker">LOADING</span>
-          <h2 id="loading-title">PREPARING ESCAPE</h2>
-          <div class="loading-bar"><span id="loading-bar-fill"></span></div>
-          <p id="loading-status">LOADING OBJECTS...</p>
-        </div>
-      </section>
-      <section class="episode-screen" aria-label="Episode selection">
-        <div class="episode-screen-content"><p>EPISODE SELECT</p><h1>ESCAPE</h1><div class="episode-card-grid"><div class="episode-card-shell"><button class="episode-card" id="parking-lot-episode-button" type="button"><canvas class="episode-card-preview" id="parking-preview-canvas" aria-label="Parking lot 3D preview"></canvas></button><strong>PARKING LOT</strong></div><div class="episode-card-shell"><button class="episode-card" id="classroom-episode-button" type="button"><canvas class="episode-card-preview" id="classroom-preview-canvas" aria-label="Classroom 3D preview"></canvas></button><strong>CLASSROOM</strong></div><div class="episode-card-shell"><button class="episode-card" id="chess-episode-button" type="button"><canvas class="episode-card-preview" id="chess-preview-canvas" aria-label="Chess 3D preview"></canvas></button><strong>CHESS</strong></div></div></div>
-      </section>
-      <canvas id="range-canvas" aria-label="Escape game view"></canvas>
-      <div class="crosshair" aria-hidden="true"><span></span><i></i><b></b><em></em></div>
-      <div class="hit-marker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      <div class="fear-overlay" aria-hidden="true"></div>
-      <div class="death-overlay" aria-hidden="true"></div>
-      <section class="death-screen" aria-label="You died">
-        <div class="death-actions"><button class="death-action-button" id="death-retry-button" type="button">RETRY</button><button class="death-action-button" id="death-exit-button" type="button">EXIT</button></div>
-      </section>
-      <div class="episode-fade-overlay" aria-hidden="true"></div>
-      <button class="settings-button" type="button" aria-label="Open settings" title="Open settings">⚙</button>
-      <button class="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button>
-      <div class="settings-overlay" aria-hidden="true">
-        <button class="settings-close" type="button" aria-label="Close settings" title="Close settings">×</button>
-        <section class="menu-home menu-view is-visible" aria-label="Pause menu">
-          <h1>PAUSED</h1>
-          <div class="menu-choice-list"><button class="menu-choice-button" id="menu-settings-button" type="button"><strong>ENVIRONMENT SETTINGS</strong><span>Adjust your escape environment</span></button><button class="menu-choice-button menu-exit-button" id="menu-exit-button" type="button"><strong>EXIT</strong><span>Return to menu</span></button></div>
-        </section>
-        <section class="mode-menu menu-view" aria-label="Mode selection">
-          <h1>MODE SELECT</h1>
-          <div class="mode-layout">
-            <nav class="mode-category-nav" aria-label="Mode categories"><button class="mode-category-button is-active" data-mode-category="flicking" type="button">FLICKING</button><button class="mode-category-button" data-mode-category="tracking" type="button">TRACKING</button></nav>
-            <div class="mode-category-content"><section class="mode-panel is-visible" data-mode-panel="flicking"><h2>FLICKING</h2><div class="mode-select" role="group" aria-label="Flicking modes"><button class="mode-button is-active" data-mode="flickshot" type="button">FLICKSHOT</button><button class="mode-button" data-mode="microshot" type="button">MICROSHOT</button><button class="mode-button" data-mode="gridshot" type="button">GRIDSHOT</button><button class="mode-button" data-mode="reflexshot" type="button">REFLEXSHOT</button></div></section><section class="mode-panel" data-mode-panel="tracking"><h2>TRACKING</h2><div class="mode-select" role="group" aria-label="Tracking modes"><button class="mode-button" data-mode="strafetrack" type="button">STRAFETRACK</button><button class="mode-button" data-mode="spheretrack" type="button">SPHERETRACK</button><button class="mode-button" data-mode="fallingtrack" type="button">FALLING TRACK</button></div></section></div>
-          </div>
-        </section>
-        <div class="settings-content">
-          <div class="settings-heading"><span>ENVIRONMENT SETTINGS</span></div>
-          <div class="settings-layout">
-            <nav class="settings-nav" aria-label="Settings categories"><button class="settings-category is-active" data-category="display" type="button">DISPLAY &amp; GRAPHICS</button><button class="settings-category" data-category="weapon" type="button">WEAPON &amp; BALLISTICS</button><button class="settings-category" data-category="controls" type="button">MOUSE &amp; CONTROLS</button><button class="settings-category" data-category="crosshair" type="button">CROSSHAIR</button><button class="settings-category" data-category="targets" type="button">TARGETS &amp; ENVIRONMENT</button><button class="settings-category" data-category="sound" type="button">SOUND</button></nav>
-            <div class="settings-category-content">
-              <section class="settings-group settings-panel-group is-visible" data-category-panel="display"><h2>DISPLAY &amp; GRAPHICS</h2><label>RENDER DISTANCE <output id="render-distance-value">600</output><input id="render-distance-setting" type="range" min="100" max="600" step="10" value="600"></label><label>FOV <output id="fov-value">65</output><input id="fov-setting" type="range" min="45" max="103" step="1" value="65"></label><label>RESOLUTION SCALE <output id="resolution-scale-value">100%</output><input id="resolution-scale-setting" type="range" min="50" max="150" step="5" value="100"></label><label>MAX FPS <select id="max-fps-setting"><option value="0">UNLIMITED</option><option value="60">60</option><option value="144">144</option><option value="240">240</option></select></label><label class="toggle-row">ANTI-ALIASING <input id="antialiasing-setting" type="checkbox" checked></label></section>
-              <section class="settings-group settings-panel-group" data-category-panel="weapon"><h2>WEAPON &amp; BALLISTICS</h2><div class="weapon-preview"><h2>CURRENT WEAPON</h2><canvas id="weapon-preview-canvas" aria-label="Current weapon preview"></canvas><strong id="current-weapon-name">COLT 1911</strong></div><label>WEAPON <select id="weapon-setting"><option value="pistol">PISTOL</option></select></label><label>BULLET SPEED <output id="bullet-speed-value">253</output><input id="bullet-speed-setting" type="range" min="50" max="500" step="1" value="253"></label><label>RECOIL <output id="recoil-value">50%</output><input id="recoil-setting" type="range" min="0" max="100" value="50"></label><label>SPREAD <output id="spread-value">50%</output><input id="spread-setting" type="range" min="0" max="150" value="50"></label><label>MOVEMENT SPREAD <output id="movement-spread-value">225%</output><input id="movement-spread-setting" type="range" min="100" max="500" value="225"></label><label>AIM JUMP SPREAD <output id="aiming-jump-spread-value">550%</output><input id="aiming-jump-spread-setting" type="range" min="100" max="800" value="550"></label><label>HIPFIRE JUMP SPREAD <output id="hipfire-jump-spread-value">450%</output><input id="hipfire-jump-spread-setting" type="range" min="100" max="800" value="450"></label><label>BULLET DROP <output id="bullet-drop-value">100%</output><input id="bullet-drop-setting" type="range" min="0" max="200" value="100"></label></section>
-              <section class="settings-group settings-panel-group" data-category-panel="controls"><h2>MOUSE &amp; CONTROLS</h2><label>SENSITIVITY <output id="settings-sensitivity-value">0.70</output><input id="settings-sensitivity" type="range" min="0.2" max="1.5" step="0.05" value="0.7"></label><label>DPI MULTIPLIER <output id="dpi-value">800</output><input id="dpi-setting" type="range" min="100" max="3200" step="100" value="800"></label><label>ADS RATIO <output id="ads-ratio-value">1.00</output><input id="ads-ratio-setting" type="range" min="0.1" max="2" step="0.05" value="1"></label><label>ADS FOV <output id="ads-fov-value">48</output><input id="ads-fov-setting" type="range" min="30" max="65" step="1" value="48"></label><label class="toggle-row">RAW INPUT <input id="raw-input-setting" type="checkbox" checked></label></section>
-              <section class="settings-group settings-panel-group" data-category-panel="crosshair"><h2>CROSSHAIR</h2><label>STYLE <select id="crosshair-style-setting"><option>DOT + CROSS</option><option>DOT</option><option>CROSS</option><option>CIRCLE</option></select></label><label>COLOR <input id="crosshair-color-setting" type="color" value="#ffffff"></label><label>GAP <output id="crosshair-gap-value">14px</output><input id="crosshair-gap-setting" type="range" min="0" max="30" value="14"></label><label>LENGTH <output id="crosshair-length-value">8px</output><input id="crosshair-length-setting" type="range" min="2" max="24" value="8"></label><label>THICKNESS <output id="crosshair-thickness-value">1px</output><input id="crosshair-thickness-setting" type="range" min="1" max="5" value="1"></label><label>DOT SIZE <output id="crosshair-dot-size-value">5px</output><input id="crosshair-dot-size-setting" type="range" min="1" max="12" value="5"></label><label>CIRCLE SIZE <output id="crosshair-circle-size-value">30px</output><input id="crosshair-circle-size-setting" type="range" min="8" max="58" value="30"></label><label>OPACITY <output id="crosshair-opacity-value">90%</output><input id="crosshair-opacity-setting" type="range" min="10" max="100" value="90"></label><label>OUTLINE COLOR <input id="crosshair-outline-color-setting" type="color" value="#000000"></label><label>OUTLINE THICKNESS <output id="crosshair-outline-thickness-value">0px</output><input id="crosshair-outline-thickness-setting" type="range" min="0" max="4" value="0"></label><label class="toggle-row">DYNAMIC RESPONSE <input id="crosshair-dynamic-setting" type="checkbox" checked></label><label>DYNAMIC STRENGTH <output id="crosshair-dynamic-strength-value">100%</output><input id="crosshair-dynamic-strength-setting" type="range" min="0" max="200" value="100"></label><h2>HIT MARKER</h2><label>COLOR <input id="hit-marker-color-setting" type="color" value="#67d68b"></label><label>SIZE <output id="hit-marker-size-value">36px</output><input id="hit-marker-size-setting" type="range" min="16" max="72" value="36"></label><label>LENGTH <output id="hit-marker-length-value">9px</output><input id="hit-marker-length-setting" type="range" min="3" max="24" value="9"></label><label>THICKNESS <output id="hit-marker-thickness-value">1px</output><input id="hit-marker-thickness-setting" type="range" min="1" max="5" value="1"></label><label>GAP <output id="hit-marker-gap-value">10px</output><input id="hit-marker-gap-setting" type="range" min="4" max="24" value="10"></label><label>FADE TIME <output id="hit-marker-duration-value">0.22s</output><input id="hit-marker-duration-setting" type="range" min="0.05" max="1" step="0.01" value="0.22"></label></section>
-              <section class="settings-group settings-panel-group" data-category-panel="targets"><h2>TARGETS &amp; ENVIRONMENT</h2><label>BACKGROUND <input id="background-color-setting" type="color" value="#0b0e12"></label><label>FLOOR <input id="floor-color-setting" type="color" value="#171d24"></label><label>GRID <input id="grid-color-setting" type="color" value="#33404a"></label><label>TARGET <input id="target-color-setting" type="color" value="#e33f32"></label><label>TARGET SIZE <output id="target-size-value">100%</output><input id="target-size-setting" type="range" min="50" max="150" value="100"></label><label>TRACKING SPEED <output id="tracking-speed-value">4.0</output><input id="tracking-speed-setting" type="range" min="1" max="10" step="0.5" value="4"></label><label>FALLING HORIZONTAL FORCE <output id="falling-horizontal-force-value">3.4</output><input id="falling-horizontal-force-setting" type="range" min="0" max="8" step="0.1" value="3.4"></label><label>FALLING LAUNCH <output id="falling-launch-value">12.0</output><input id="falling-launch-setting" type="range" min="0" max="20" step="0.5" value="12"></label><label>FALLING GRAVITY <output id="falling-gravity-value">18.0</output><input id="falling-gravity-setting" type="range" min="1" max="36" step="0.5" value="18"></label><label>FALLING RESPAWN DELAY <output id="falling-respawn-delay-value">0.60s</output><input id="falling-respawn-delay-setting" type="range" min="0.1" max="2" step="0.05" value="0.6"></label></section>
-              <section class="settings-group settings-panel-group" data-category-panel="sound"><h2>SOUND</h2><label>MASTER VOLUME <output id="master-volume-value">100%</output><input id="master-volume-setting" type="range" min="0" max="100" value="100"></label></section>
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-    </section>
-  </main>
-`;
+mountAppShell(app);
 
 const canvas = document.querySelector<HTMLCanvasElement>("#range-canvas")!;
 const matryoshkaPreviewCanvas = document.querySelector<HTMLCanvasElement>(
@@ -160,121 +160,26 @@ const deathRetryButton = document.querySelector<HTMLButtonElement>(
 const deathExitButton =
   document.querySelector<HTMLButtonElement>("#death-exit-button")!;
 const range = document.querySelector<HTMLElement>(".range")!;
-const keyPickupPrompt = document.createElement("div");
-keyPickupPrompt.className = "interaction-prompt";
-keyPickupPrompt.textContent = "PRESS [F] TO PICK UP KEY";
-keyPickupPrompt.hidden = true;
-range.append(keyPickupPrompt);
-const vehicleSearchHint = document.createElement("div");
-vehicleSearchHint.className = "vehicle-search-hint";
-vehicleSearchHint.textContent = "[P]: PANIC BUTTON";
-vehicleSearchHint.hidden = true;
-range.append(vehicleSearchHint);
-const classroomDoorProgressRing = document.createElement("div");
-classroomDoorProgressRing.className = "classroom-door-progress-ring";
-classroomDoorProgressRing.innerHTML =
-  '<svg viewBox="0 0 58 58" aria-hidden="true"><circle class="door-progress-track" cx="29" cy="29" r="24"></circle><circle class="door-progress-fill" cx="29" cy="29" r="24"></circle></svg>';
-const classroomDoorProgressFill =
-  classroomDoorProgressRing.querySelector<SVGCircleElement>(
-    ".door-progress-fill",
-  )!;
-const classroomDoorProgressCircumference = 2 * Math.PI * 24;
-classroomDoorProgressFill.style.strokeDasharray = `${classroomDoorProgressCircumference}`;
-classroomDoorProgressFill.style.strokeDashoffset = `${classroomDoorProgressCircumference}`;
-classroomDoorProgressRing.hidden = true;
-range.append(classroomDoorProgressRing);
-const staminaHud = document.createElement("div");
-staminaHud.className = "stamina-hud";
-staminaHud.innerHTML = `
-  <div class="stamina-hud-label-row">
-    <span class="stamina-hud-label">STAMINA</span>
-    <span class="stamina-hud-hint">HOLD SHIFT TO SPRINT</span>
-  </div>
-  <div class="stamina-bar"><span id="stamina-bar-fill"></span></div>
-`;
-range.append(staminaHud);
-const staminaBarFill =
-  document.querySelector<HTMLElement>("#stamina-bar-fill")!;
-const weaponPickupPrompt = document.createElement("div");
-weaponPickupPrompt.className = "interaction-prompt";
-weaponPickupPrompt.textContent = "PRESS [F] TO PICK UP PISTOL";
-weaponPickupPrompt.hidden = true;
-range.append(weaponPickupPrompt);
-const reloadPrompt = document.createElement("div");
-reloadPrompt.className = "interaction-prompt reload-prompt";
-reloadPrompt.textContent = "PRESS [R] TO RELOAD";
-reloadPrompt.hidden = true;
-range.append(reloadPrompt);
+const hudOverlayElements = createHudOverlay(range);
+const {
+  vehicleSearchHint,
+  staminaBarFill,
+  weaponPickupPrompt,
+  reloadPrompt,
+  trueCarPrompt,
+  trueCarSoundIndicator,
+  classroomSeatPrompt,
+  weaponModePrompt,
+} = hudOverlayElements;
 let reloadPromptFadeTimer: number | null = null;
-const trueCarPrompt = document.createElement("div");
-trueCarPrompt.className = "interaction-prompt";
-trueCarPrompt.textContent = "PRESS [F] TO ENTER";
-trueCarPrompt.hidden = true;
-range.append(trueCarPrompt);
-const trueCarSoundIndicator = document.createElement("div");
-trueCarSoundIndicator.className = "true-car-sound-indicator";
-trueCarSoundIndicator.hidden = true;
-range.append(trueCarSoundIndicator);
-const classroomSeatPrompt = document.createElement("div");
-classroomSeatPrompt.className = "interaction-prompt";
-classroomSeatPrompt.textContent = "PRESS [F] TO SIT";
-classroomSeatPrompt.hidden = true;
-range.append(classroomSeatPrompt);
-const weaponModePrompt = document.createElement("div");
-weaponModePrompt.className = "weapon-mode-hud";
-weaponModePrompt.innerHTML =
-  '<span class="weapon-key-hint"><b>1</b> DRAW</span><span class="weapon-key-hint"><b>2</b> HOLSTER</span><span><b>F</b> INTERACT</span>';
-weaponModePrompt.hidden = true;
-staminaHud.append(weaponModePrompt);
 const episodeFadeOverlay = document.querySelector<HTMLElement>(
   ".episode-fade-overlay",
 )!;
-const scopeOverlay = document.createElement("div");
-scopeOverlay.className = "scope-overlay";
-scopeOverlay.innerHTML =
-  '<div class="scope-reticle"><span></span><i></i><b></b><em></em></div>';
-range.append(scopeOverlay);
-const crosshairPreview = crosshair.cloneNode(true) as HTMLElement;
-crosshairPreview.classList.remove("is-scope-hidden", "is-hipfire-hidden");
-crosshairPreview.classList.add("crosshair-preview");
-const scopePreview = document.createElement("div");
-scopePreview.className =
-  "scope-overlay scope-preview-overlay scope-classic is-visible";
-scopePreview.innerHTML =
-  '<div class="scope-reticle"><span></span><i></i><b></b><em></em></div>';
-const hitMarkerPreview = hitMarker.cloneNode(true) as HTMLElement;
-hitMarkerPreview.classList.add("hit-marker-preview");
-hitMarkerPreview.style.opacity = "1";
 const crosshairPanel = document.querySelector<HTMLElement>(
   '[data-category-panel="crosshair"]',
 )!;
-const customPreview = document.createElement("div");
-customPreview.className = "custom-preview";
-customPreview.innerHTML =
-  '<div class="custom-preview-item"><span>CROSSHAIR PREVIEW</span><div class="crosshair-preview-stage"></div></div>';
-customPreview
-  .querySelector(".crosshair-preview-stage")
-  ?.append(crosshairPreview);
-crosshairPanel.prepend(customPreview);
-const hitMarkerPreviewCard = document.createElement("div");
-hitMarkerPreviewCard.className = "custom-preview custom-preview-hit-marker";
-hitMarkerPreviewCard.innerHTML =
-  '<div class="custom-preview-item"><span>HIT MARKER PREVIEW</span><div class="hit-marker-preview-stage"></div></div>';
-hitMarkerPreviewCard
-  .querySelector(".hit-marker-preview-stage")
-  ?.append(hitMarkerPreview);
-const hitMarkerHeading = [...crosshairPanel.querySelectorAll("h2")].find(
-  (heading) => heading.textContent?.trim() === "HIT MARKER",
-);
-hitMarkerHeading?.before(hitMarkerPreviewCard);
-const scopePreviewCard = document.createElement("div");
-scopePreviewCard.className = "custom-preview custom-preview-scope";
-scopePreviewCard.innerHTML =
-  '<div class="custom-preview-item"><span>SCOPE PREVIEW</span><div class="scope-preview-stage"></div></div>';
-scopePreviewCard.querySelector(".scope-preview-stage")?.append(scopePreview);
-const crosshairPreviewTargets = [crosshair, crosshairPreview];
-const _scopePreviewTargets = [scopeOverlay, scopePreview];
-const hitMarkerPreviewTargets = [hitMarker, hitMarkerPreview];
+const { scopeOverlay, crosshairPreviewTargets, hitMarkerPreviewTargets } =
+  createSettingsPreviews({ range, crosshair, hitMarker, crosshairPanel });
 const settingsButton =
   document.querySelector<HTMLButtonElement>(".settings-button")!;
 const settingsOverlay =
@@ -746,7 +651,7 @@ type ShootingMode =
   | "strafetrack"
   | "spheretrack"
   | "fallingtrack";
-type WeaponId = "pistol";
+type WeaponId = CurrentWeaponId;
 type RecoilMode = "recover" | "sustained";
 type WeaponProfile = {
   bulletSpeed: number;
@@ -774,7 +679,6 @@ const weaponProfiles: Record<WeaponId, WeaponProfile> = {
 };
 let shootingMode: ShootingMode = "flickshot";
 let _weaponSelection: "auto" | WeaponId = "auto";
-let activeWeapon: WeaponId = "pistol";
 let recoilMode: RecoilMode = "recover";
 let recoilMultiplier = 1;
 let spreadMultiplier = 1;
@@ -848,8 +752,6 @@ const classroomStudentKnockdownUntil = new Map<THREE.Object3D, number>();
 let classroomBounds: THREE.Box3 | null = null;
 let chessRoot: THREE.Object3D | null = null;
 let chessBounds: THREE.Box3 | null = null;
-let _isInClassroom = false;
-let _isInChess = false;
 const classroomLightRig = new THREE.Group();
 classroomLightRig.visible = false;
 scene.add(classroomLightRig);
@@ -866,16 +768,9 @@ const parkingObstacleCells = new Map<string, THREE.Box3[]>();
 const keyEspObjects: THREE.Object3D[] = [];
 const trueCarEspObjects: THREE.Object3D[] = [];
 let parkedCarsReady = false;
-let gameplayStarted = false;
-let gameplayPaused = true;
-let episodeEntryLoading = false;
 let keyPickupObject: THREE.Object3D | null = null;
 let keyPickupCollected = false;
 let weaponPickupObject: THREE.Object3D | null = null;
-let weaponPickupCollected = false;
-let weaponDrawn = false;
-let weaponHolstering = false;
-let weaponRaising = false;
 let trueCar: THREE.Object3D | null = null;
 let trueCarEntered = false;
 let trueCarSoundPlaying = false;
@@ -885,7 +780,6 @@ let parkingLotFearActive = false;
 let classroomFearActive = false;
 let carEndingShakeStartedAt = -Infinity;
 let carEndingShakePeaks: number[] = [];
-type MatryoshkaMobState = "wander" | "investigate" | "chase";
 type MatryoshkaSoundSource = "player" | "car";
 type MatryoshkaWaypointNetwork = "yellow" | "blue";
 type MatryoshkaInvestigationPhase = "yellow" | "blue";
@@ -976,19 +870,10 @@ const matryoshkaObstaclePadding = 0.3;
 const playerWalkSpeed = 3.8;
 const playerRunSpeed = 11.5;
 const playerMaxStamina = PLAYER_MAX_STAMINA;
-const playerStaminaDrainPerSecond = 34;
-const playerStaminaRegenPerSecond = 22;
 const playerSprintThresholdRatio = 0.3;
 const playerSprintThreshold = playerMaxStamina * playerSprintThresholdRatio;
-let playerStamina = playerMaxStamina;
-let playerSprintActive = false;
-let playerSprintAcceleration = 0;
 let jumpMomentumSpeed = playerWalkSpeed;
 let runningFootstepInterval = 0.5;
-let runningFootstepClipDuration = runningFootstepInterval * 2;
-let runningFootstepLoopStart = 0;
-let runningFootstepCyclesPerLoop = 1;
-let runningFootstepPeakTimes: number[] = [];
 let runningFootstepSamples: AudioBuffer[] = [];
 const runningFootstepSources = new Set<AudioBufferSourceNode>();
 const runningFootstepGains = new Map<AudioBufferSourceNode, GainNode>();
@@ -998,121 +883,15 @@ let runningFeedbackStrength = 1;
 let nextRunningStepPhase = 1;
 
 function getStaminaSprintFactor(): number {
-  return playerStamina >= playerSprintThreshold
+  return gameState.playerStamina >= playerSprintThreshold
     ? 1
-    : THREE.MathUtils.clamp(playerStamina / playerSprintThreshold, 0, 1);
+    : THREE.MathUtils.clamp(
+        gameState.playerStamina / playerSprintThreshold,
+        0,
+        1,
+      );
 }
 
-function detectTwoFootstepClipDuration(buffer: AudioBuffer): number {
-  const samples = buffer.getChannelData(0);
-  const windowSize = Math.max(1, Math.floor(buffer.sampleRate * 0.01));
-  const envelope: number[] = [];
-  for (let offset = 0; offset < samples.length; offset += windowSize) {
-    let energy = 0;
-    const end = Math.min(samples.length, offset + windowSize);
-    for (let index = offset; index < end; index += 1)
-      energy += samples[index] ** 2;
-    envelope.push(Math.sqrt(energy / Math.max(1, end - offset)));
-  }
-  const sortedEnvelope = [...envelope].sort((first, second) => first - second);
-  const noiseFloor =
-    sortedEnvelope[Math.floor(sortedEnvelope.length * 0.65)] ?? 0;
-  const peakThreshold = Math.max(
-    noiseFloor * 2.2,
-    (sortedEnvelope.at(-1) ?? 0) * 0.2,
-  );
-  const minPeakSpacing = Math.max(1, Math.floor(0.16 / 0.01));
-  const peaks: number[] = [];
-  for (let index = 1; index < envelope.length - 1; index += 1) {
-    if (
-      envelope[index] < peakThreshold ||
-      envelope[index] < envelope[index - 1] ||
-      envelope[index] < envelope[index + 1]
-    )
-      continue;
-    if (peaks.length > 0 && index - peaks[peaks.length - 1] < minPeakSpacing) {
-      if (envelope[index] > envelope[peaks[peaks.length - 1]])
-        peaks[peaks.length - 1] = index;
-      continue;
-    }
-    peaks.push(index);
-  }
-  const tenthFootstep = peaks[9];
-  const eleventhFootstep = peaks[10];
-  const detectedDuration =
-    eleventhFootstep !== undefined
-      ? Math.max(0.2, eleventhFootstep * 0.01 - 0.035)
-      : tenthFootstep !== undefined
-        ? Math.min(buffer.duration, tenthFootstep * 0.01 + 0.12)
-        : buffer.duration;
-  const firstFootstep = peaks[0];
-  const secondFootstep = peaks[1];
-  if (firstFootstep !== undefined && secondFootstep !== undefined) {
-    runningFootstepInterval = Math.max(
-      0.2,
-      (secondFootstep - firstFootstep) * 0.01,
-    );
-    runningFootstepLoopStart = Math.max(0, firstFootstep * 0.01 - 0.08);
-    runningFootstepClipDuration =
-      eleventhFootstep === undefined
-        ? Math.min(buffer.duration, detectedDuration)
-        : Math.min(
-            buffer.duration,
-            Math.max(
-              runningFootstepLoopStart + runningFootstepInterval,
-              eleventhFootstep * 0.01 - 0.035,
-            ),
-          );
-    runningFootstepCyclesPerLoop =
-      eleventhFootstep === undefined ? Math.max(1, peaks.length - 1) : 10;
-    const loopDuration = Math.max(
-      0.01,
-      runningFootstepClipDuration - runningFootstepLoopStart,
-    );
-    runningFootstepInterval = loopDuration / runningFootstepCyclesPerLoop;
-  } else {
-    runningFootstepLoopStart = 0;
-    runningFootstepClipDuration = Math.min(buffer.duration, detectedDuration);
-    runningFootstepCyclesPerLoop = Math.max(
-      1,
-      Math.round(runningFootstepClipDuration / runningFootstepInterval),
-    );
-    runningFootstepInterval =
-      runningFootstepClipDuration / runningFootstepCyclesPerLoop;
-  }
-  runningFootstepPeakTimes = peaks
-    .slice(0, runningFootstepCyclesPerLoop)
-    .map((peak) => peak * 0.01);
-  runningFootstepSamples = runningFootstepPeakTimes.map((peakTime, index) => {
-    const startTime = peakTime;
-    const nextPeak = runningFootstepPeakTimes[index + 1];
-    const sampleEnd = Math.min(
-      runningFootstepClipDuration,
-      peakTime + Math.min(0.28, runningFootstepInterval * 0.65),
-      nextPeak === undefined
-        ? runningFootstepClipDuration
-        : (peakTime + nextPeak) * 0.5 + 0.05,
-    );
-    const startFrame = Math.floor(startTime * buffer.sampleRate);
-    const endFrame = Math.max(
-      startFrame + 1,
-      Math.min(buffer.length, Math.ceil(sampleEnd * buffer.sampleRate)),
-    );
-    const sample = gunshotAudioContext.createBuffer(
-      buffer.numberOfChannels,
-      endFrame - startFrame,
-      buffer.sampleRate,
-    );
-    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
-      sample.copyToChannel(
-        buffer.getChannelData(channel).subarray(startFrame, endFrame),
-        channel,
-      );
-    }
-    return sample;
-  });
-  return runningFootstepClipDuration;
-}
 let _matryoshkaVehicleHeight = 20;
 const matryoshkaMobPosition = new THREE.Vector3();
 const matryoshkaPlayerPosition = new THREE.Vector3();
@@ -1128,8 +907,6 @@ const matryoshkaSoundTarget = new THREE.Vector3();
 const matryoshkaCarSoundTarget = new THREE.Vector3();
 let matryoshkaSoundVersion = 0;
 let matryoshkaCarSoundVersion = 0;
-let playerDeathActive = false;
-let playerDeathElapsed = 0;
 let classroomContactDeathPending = false;
 let classroomContactDeathAt = -Infinity;
 const playerDeathStartPosition = new THREE.Vector3();
@@ -1143,7 +920,7 @@ function triggerClassroomDangerDeath(
   teacher: MatryoshkaMob,
   now: number,
 ): void {
-  if (playerDeathActive || classroomContactDeathPending) return;
+  if (gameState.playerDeathActive || classroomContactDeathPending) return;
   camera.getWorldDirection(classroomContactDirection);
   classroomContactPosition
     .copy(camera.position)
@@ -1179,7 +956,7 @@ function triggerClassroomDangerDeath(
 }
 
 function triggerPlayerDeath(): void {
-  if (playerDeathActive) return;
+  if (gameState.playerDeathActive) return;
   classroomContactDeathPending = false;
   classroomContactDeathAt = -Infinity;
   classroomBackDoorOpening = false;
@@ -1189,10 +966,9 @@ function triggerPlayerDeath(): void {
     window.clearTimeout(classroomBackDoorOpeningTimer);
     classroomBackDoorOpeningTimer = null;
   }
-  classroomDoorProgressRing.hidden = true;
-  classroomDoorProgressFill.style.strokeDashoffset = `${classroomDoorProgressCircumference}`;
-  playerDeathActive = true;
-  playerDeathElapsed = 0;
+  renderClassroomDoorProgress(hudOverlayElements, null);
+  gameState.playerDeathActive = true;
+  gameState.playerDeathElapsed = 0;
   playerDeathStartPosition.copy(camera.position);
   playerDeathStartQuaternion.copy(camera.quaternion);
   deathOverlay.classList.add("is-visible");
@@ -1202,7 +978,7 @@ function triggerPlayerDeath(): void {
   stopRunningSound();
   stopHeartbeatSound();
   void deathSoundReady.then(playDeathSound);
-  keys.clear();
+  keyInput.clear();
   matryoshkaMobs.forEach((mob) => {
     mob.velocity.set(0, 0, 0);
     mob.route = [];
@@ -1220,7 +996,7 @@ function exitApplication(): void {
 function returnToEpisodeSelect(): void {
   if (controls.isLocked) controls.unlock();
   stopHeartbeatSound();
-  setStoredEpisodeId("parking-lot");
+  gameState.currentEpisode = setStoredEpisodeId("parking-lot");
   sessionStorage.setItem("escape-return-to-episode-select", "true");
   window.location.reload();
 }
@@ -1234,26 +1010,27 @@ function updatePlayerStamina(delta: number): void {
     trueCarEntered,
     startScreen,
     weaponReloading,
-    playerStamina,
-    playerSprintActive,
+    playerStamina: gameState.playerStamina,
+    playerSprintActive: gameState.playerSprintActive,
     staminaBarFill,
   });
-  playerStamina = nextStamina.playerStamina;
-  playerSprintActive = nextStamina.playerSprintActive;
+  gameState.playerStamina = nextStamina.playerStamina;
+  gameState.playerSprintActive = nextStamina.playerSprintActive;
 }
 
 function restartCurrentEpisode(): void {
   const currentEpisode = getStoredEpisodeId();
-  episodeEntryLoading = false;
+  gameState.currentEpisode = currentEpisode;
+  gameState.episodeEntryLoading = false;
   range.classList.remove("is-loading", "is-enter-loading");
-  playerDeathActive = false;
-  playerDeathElapsed = 0;
+  gameState.playerDeathActive = false;
+  gameState.playerDeathElapsed = 0;
   deathOverlay.classList.remove("is-visible");
   deathScreen.classList.remove("is-visible");
   episodeFadeOverlay.classList.remove("is-fading");
   episodeFadeOverlay.classList.remove("is-complete");
   controls.unlock();
-  keys.clear();
+  keyInput.clear();
   stopAutomaticFire();
   stopRunningSound();
   stopHeartbeatSound();
@@ -1263,18 +1040,18 @@ function restartCurrentEpisode(): void {
   isGrounded = false;
   jumpMomentumActive = false;
   cancelWeaponReload();
-  weaponAmmo = 0;
+  gameState.weaponAmmo = 0;
   weapon.visible = false;
-  weaponDrawn = false;
-  weaponHolstering = false;
-  weaponRaising = false;
+  gameState.weaponDrawn = false;
+  gameState.weaponHolstering = false;
+  gameState.weaponRaising = false;
   gsap.killTweensOf(weapon.position);
   gsap.killTweensOf(weapon.rotation);
-  playerStamina = playerMaxStamina;
-  playerSprintActive = false;
-  playerSprintAcceleration = 0;
+  gameState.playerStamina = playerMaxStamina;
+  gameState.playerSprintActive = false;
+  gameState.playerSprintAcceleration = 0;
   keyPickupCollected = false;
-  weaponPickupCollected = false;
+  gameState.weaponPickupCollected = false;
   if (keyPickupObject) keyPickupObject.visible = true;
   if (weaponPickupObject) weaponPickupObject.visible = true;
   trueCarEntered = false;
@@ -1360,12 +1137,12 @@ function restartCurrentEpisode(): void {
     mob.physicsBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
     chooseMatryoshkaTarget(mob);
   }
-  _isInChess = currentEpisode === "chess";
-  _isInClassroom = currentEpisode === "classroom";
-  if (_isInClassroom) {
+  gameState.isInChess = currentEpisode === "chess";
+  gameState.isInClassroom = currentEpisode === "classroom";
+  if (gameState.isInClassroom) {
     camera.position.copy(classroomSpawnPosition);
     camera.lookAt(classroomEntryPosition);
-  } else if (_isInChess) {
+  } else if (gameState.isInChess) {
     camera.position.copy(chessSpawnPosition);
     camera.lookAt(chessEntryPosition);
   } else {
@@ -1389,7 +1166,7 @@ function restartCurrentEpisode(): void {
     heartbeatSoundReady,
     playHeartbeatSound,
   });
-  if (_isInClassroom) sitAtClassroomSeat(true);
+  if (gameState.isInClassroom) sitAtClassroomSeat(true);
   syncEpisodeOnlyObjects();
 }
 
@@ -1552,14 +1329,14 @@ function _getMatryoshkaFreeRoamTarget(
 }
 
 function addMapPointFromAim(): void {
-  const activeRoot = _isInClassroom
+  const activeRoot = gameState.isInClassroom
     ? classroomRoot
-    : _isInChess
+    : gameState.isInChess
       ? chessRoot
       : parkingLotRoot;
-  const activeBounds = _isInClassroom
+  const activeBounds = gameState.isInClassroom
     ? classroomBounds
-    : _isInChess
+    : gameState.isInChess
       ? chessBounds
       : parkingBounds;
   if (!activeRoot || !activeBounds) return;
@@ -1622,6 +1399,14 @@ function scheduleClassroomTeacherTurn(now: number): void {
 }
 
 function alertClassroomStudents(now: number): void {
+  const hasStandingStudents = classroomStudents.some(
+    (student) => !classroomDeadStudents.has(student),
+  );
+  if (!hasStandingStudents) {
+    classroomStudentsAlerted = false;
+    classroomTeacherStudentTurnAt = -Infinity;
+    return;
+  }
   if (classroomStudentsAlerted) return;
   classroomStudentsAlerted = true;
   classroomTeacherStudentTurnAt = now + 3;
@@ -1633,7 +1418,7 @@ function alertMatryoshkasToSound(
   interruptChase = false,
   deferUntilBellEnds = 0,
 ): void {
-  if (_isInClassroom && source === "player" && classroomBellPlaying) {
+  if (gameState.isInClassroom && source === "player" && classroomBellPlaying) {
     if (deferUntilBellEnds > performance.now() / 1000) {
       classroomDeferredReloadSoundPosition.copy(position);
       classroomDeferredReloadSoundUntil = deferUntilBellEnds;
@@ -1982,114 +1767,28 @@ function isMatryoshkaWallPathBlocked(
   return false;
 }
 
-function getMatryoshkaHorizontalDistanceSquared(
-  first: THREE.Vector3,
-  second: THREE.Vector3,
-): number {
-  const deltaX = first.x - second.x;
-  const deltaZ = first.z - second.z;
-  return deltaX * deltaX + deltaZ * deltaZ;
-}
-
 function chooseMatryoshkaTarget(mob: MatryoshkaMob): void {
-  mob.object.getWorldPosition(matryoshkaMobPosition);
-  if (mob.state !== "wander") mob.patrolDestination = null;
-  const chaseTarget = mob.lastSeenPlayerPosition.clone();
-  if (mob.state === "chase") {
-    mob.route = [chaseTarget];
-    mob.target.copy(chaseTarget);
-    return;
-  }
-  if (mob.state === "investigate") {
-    const soundTarget = (
-      mob.soundSource === "player"
-        ? matryoshkaSoundTarget
-        : matryoshkaCarSoundTarget
-    ).clone();
-    mob.route = [soundTarget];
-    mob.target.copy(mob.route[0]);
-    mob.heardSoundVersion =
-      mob.soundSource === "player"
-        ? matryoshkaSoundVersion
-        : matryoshkaCarSoundVersion;
-    return;
-  }
-  if (matryoshkaWaypoints.length === 0) return;
-  const candidates: THREE.Vector3[] = [];
-  for (const waypoint of matryoshkaWaypoints) {
-    if (
-      getMatryoshkaHorizontalDistanceSquared(waypoint, matryoshkaMobPosition) >
-        36 &&
-      isMatryoshkaPatrolDestinationAvailable(mob, waypoint) &&
-      !isMatryoshkaWallPathBlocked(matryoshkaMobPosition, waypoint)
-    ) {
-      candidates.push(waypoint.clone());
-    }
-  }
-  let bestRoute: THREE.Vector3[] = [];
-  let bestDistance = 0;
-  for (const candidate of candidates) {
-    const route = [candidate];
-    const routeDistance = route.reduce(
-      (distance, point, index) =>
-        distance +
-        (index === 0
-          ? matryoshkaMobPosition.distanceTo(point)
-          : route[index - 1].distanceTo(point)),
-      0,
-    );
-    if (routeDistance > bestDistance) {
-      bestDistance = routeDistance;
-      bestRoute = route;
-    }
-  }
-  if (bestRoute.length === 0) {
-    const availableWaypoints = matryoshkaWaypoints.filter(
-      (waypoint) =>
-        getMatryoshkaHorizontalDistanceSquared(
-          waypoint,
-          matryoshkaMobPosition,
-        ) > 36 &&
-        isMatryoshkaPatrolDestinationAvailable(mob, waypoint) &&
-        !isMatryoshkaWallPathBlocked(matryoshkaMobPosition, waypoint),
-    );
-    const fallback = (
-      availableWaypoints.length > 0 ? availableWaypoints : matryoshkaWaypoints
-    ).reduce((farthest, waypoint) =>
-      waypoint.distanceToSquared(matryoshkaMobPosition) >
-      farthest.distanceToSquared(matryoshkaMobPosition)
-        ? waypoint
-        : farthest,
-    );
-    bestRoute = [fallback.clone()];
-  }
-  mob.route = bestRoute;
-  mob.target.copy(bestRoute[0]);
-  mob.patrolDestination = bestRoute[bestRoute.length - 1].clone();
+  chooseMatryoshkaMobTarget({
+    mob,
+    waypoints: matryoshkaWaypoints,
+    positionScratch: matryoshkaMobPosition,
+    playerSoundTarget: matryoshkaSoundTarget,
+    carSoundTarget: matryoshkaCarSoundTarget,
+    playerSoundVersion: matryoshkaSoundVersion,
+    carSoundVersion: matryoshkaCarSoundVersion,
+    isDestinationAvailable: isMatryoshkaPatrolDestinationAvailable,
+    isWallPathBlocked: isMatryoshkaWallPathBlocked,
+  });
 }
 
 function ensureMatryoshkaWanderMovement(mob: MatryoshkaMob): void {
-  if (mob.state !== "wander" || mob.route.length > 0) return;
-  mob.object.getWorldPosition(matryoshkaMobPosition);
-  const nextWaypoint = matryoshkaWaypoints
-    .filter(
-      (waypoint) =>
-        getMatryoshkaHorizontalDistanceSquared(
-          waypoint,
-          matryoshkaMobPosition,
-        ) > 36 &&
-        isMatryoshkaPatrolDestinationAvailable(mob, waypoint) &&
-        !isMatryoshkaWallPathBlocked(matryoshkaMobPosition, waypoint),
-    )
-    .sort(
-      (first, second) =>
-        first.distanceToSquared(matryoshkaMobPosition) -
-        second.distanceToSquared(matryoshkaMobPosition),
-    )[0];
-  if (!nextWaypoint) return;
-  mob.route = [nextWaypoint.clone()];
-  mob.target.copy(nextWaypoint);
-  mob.patrolDestination = nextWaypoint.clone();
+  ensureMatryoshkaMobWanderMovement({
+    mob,
+    waypoints: matryoshkaWaypoints,
+    positionScratch: matryoshkaMobPosition,
+    isDestinationAvailable: isMatryoshkaPatrolDestinationAvailable,
+    isWallPathBlocked: isMatryoshkaWallPathBlocked,
+  });
 }
 
 function knockDownMatryoshkaMob(
@@ -2097,23 +1796,7 @@ function knockDownMatryoshkaMob(
   now: number,
   impactDirection?: THREE.Vector3,
 ): void {
-  if (mob.knockedDownAt > 0) return;
-  mob.object.getWorldPosition(matryoshkaMobPosition);
-  mob.knockdownBaseY = mob.object.position.y;
-  mob.knockedDownAt = now;
-  mob.velocity.set(0, 0, 0);
-  mob.route = [];
-  const direction =
-    impactDirection?.clone().setY(0).normalize() ?? new THREE.Vector3(0, 0, 1);
-  mob.physicsBody.setGravityScale(gravityMultiplier, true);
-  mob.physicsBody.applyImpulse(
-    { x: direction.x * 0.55, y: 0.8, z: direction.z * 0.55 },
-    true,
-  );
-  mob.physicsBody.applyTorqueImpulse(
-    { x: direction.z * 0.18, y: 0.05, z: -direction.x * 0.18 },
-    true,
-  );
+  knockDownMatryoshkaMobRuntime(mob, now, gravityMultiplier, impactDirection);
 }
 
 function createParkingLotMatryoshkaClone(sourceMob: MatryoshkaMob): void {
@@ -2279,28 +1962,14 @@ function recoverMatryoshkaMob(mob: MatryoshkaMob): void {
 }
 
 function updateClassroomTeacherClone(mob: MatryoshkaMob, now: number): void {
-  if (!mob.classroomTurned && now >= mob.classroomNextTurnAt) {
-    mob.object.quaternion.copy(mob.initialQuaternion);
-    mob.object.rotateY(Math.PI);
-    mob.classroomTurned = true;
-    mob.classroomTurnUntil =
-      now +
-      (classroomTeacherLookDurationMin +
-        Math.random() *
-          (classroomTeacherLookDurationMax - classroomTeacherLookDurationMin)) *
-        mob.cooldownScale;
-    return;
-  }
-  if (mob.classroomTurned && now >= mob.classroomTurnUntil) {
-    mob.object.quaternion.copy(mob.initialQuaternion);
-    mob.classroomTurned = false;
-    mob.classroomNextTurnAt =
-      now +
-      (classroomTeacherTurnDelayMin +
-        Math.random() *
-          (classroomTeacherTurnDelayMax - classroomTeacherTurnDelayMin)) *
-        mob.cooldownScale;
-  }
+  updateClassroomTeacherCloneTurn({
+    teacher: mob,
+    now,
+    turnDelayMin: classroomTeacherTurnDelayMin,
+    turnDelayMax: classroomTeacherTurnDelayMax,
+    lookDurationMin: classroomTeacherLookDurationMin,
+    lookDurationMax: classroomTeacherLookDurationMax,
+  });
 }
 
 function checkClassroomTeacherDanger(
@@ -2308,7 +1977,8 @@ function checkClassroomTeacherDanger(
   turned: boolean,
   now: number,
 ): void {
-  if (!turned || playerDeathActive || classroomContactDeathPending) return;
+  if (!turned || gameState.playerDeathActive || classroomContactDeathPending)
+    return;
   const teacherWorldPosition = teacher.object.getWorldPosition(
     new THREE.Vector3(),
   );
@@ -2327,7 +1997,11 @@ function checkClassroomTeacherDanger(
     teacherIsOnScreen &&
     playerForward.dot(cameraToTeacher) >=
       Math.cos(THREE.MathUtils.degToRad(45));
-  if (weaponDrawn || !classroomSeatActive || !playerIsLookingAtTeacher)
+  if (
+    gameState.weaponDrawn ||
+    !classroomSeatActive ||
+    !playerIsLookingAtTeacher
+  )
     triggerClassroomDangerDeath(teacher, now);
 }
 
@@ -2405,7 +2079,7 @@ function updateClassroomTeacher(now: number): void {
 }
 
 function updateMatryoshkaMobs(now: number, delta: number): void {
-  if (_isInChess) {
+  if (gameState.isInChess) {
     parkingLotFearActive = false;
     fearActive = false;
     fearOverlay.classList.remove("is-visible");
@@ -2413,7 +2087,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
     matryoshkaMobs.forEach((mob) => mob.velocity.set(0, 0, 0));
     return;
   }
-  if (_isInClassroom) {
+  if (gameState.isInClassroom) {
     updateClassroomBell(now);
     updateClassroomTeacher(now);
     matryoshkaMobs.forEach((mob) => {
@@ -2448,7 +2122,7 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
     });
     return;
   }
-  if (playerDeathActive) return;
+  if (gameState.playerDeathActive) return;
   parkingLotFearActive = false;
   for (const mob of matryoshkaMobs) {
     if (mob.classroomOnly) continue;
@@ -2532,14 +2206,12 @@ function updateMatryoshkaMobs(now: number, delta: number): void {
       mob.heardSoundVersion === currentSoundVersion &&
       investigationTarget.distanceToSquared(matryoshkaMobPosition) < 16;
     // Visual contact always outranks an older gunshot or footstep target.
-    const nextState: MatryoshkaMobState =
-      playerVisible || chaseMemoryActive
-        ? "chase"
-        : reachedSound
-          ? "wander"
-          : mob.state === "investigate"
-            ? "investigate"
-            : "wander";
+    const nextState = determineMatryoshkaMobState({
+      playerVisible,
+      chaseMemoryActive,
+      reachedSound,
+      currentState: mob.state,
+    });
     const previousState = mob.state;
     if (nextState !== mob.state) {
       if (nextState === "chase") void chaseSoundReady.then(playChaseSound);
@@ -2713,8 +2385,8 @@ function spawnMatryoshkaMob(
       visionIndicator.renderOrder = 1005;
       visionIndicator.frustumCulled = false;
       const mobVisible = classroomOnly
-        ? _isInClassroom
-        : !_isInChess && !_isInClassroom;
+        ? gameState.isInClassroom
+        : !gameState.isInChess && !gameState.isInClassroom;
       mobObject.visible = mobVisible;
       visionIndicator.visible = mobVisible && matryoshkaVisionSetting.checked;
       matryoshkaHitboxHelper.visible =
@@ -3555,7 +3227,7 @@ parkingLotLoader.load(
             const placement = placeClassroomStudents(
               student,
               scene,
-              _isInClassroom,
+              gameState.isInClassroom,
             );
             classroomStudents.push(...placement.students);
             placement.initialRotations.forEach((rotation, studentObject) => {
@@ -3882,8 +3554,7 @@ function syncMatryoshkaToPhysics(mob: MatryoshkaMob): void {
 const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 600);
 let baseFov = camera.fov;
 camera.position.set(0, 3.4, 5);
-const controls = new PointerLockControls(camera, canvas);
-controls.pointerSpeed = 0.7;
+const controls = createPointerControls(camera, canvas);
 scene.add(controls.object);
 
 const {
@@ -3895,16 +3566,7 @@ const {
   hipRotation,
   adsPosition,
   adsRotation,
-  weaponBodyMaterial,
-  weaponSlideMaterial,
-  weaponBody,
-  weaponSlide,
-  weaponGrip,
-  weaponBarrel,
   muzzleFlash,
-  rearSightLeft,
-  rearSightRight,
-  frontSight,
 } = createWeaponRig();
 const _akHipRotation = new THREE.Euler(0.03, 0.04, 0.02);
 const _akAdsPosition = new THREE.Vector3(0.025, -0.26, -0.54);
@@ -3991,12 +3653,9 @@ const gunshotAudioContext = new AudioContext();
 let gunshotBuffer: AudioBuffer | null = null;
 let knockSoundBuffer: AudioBuffer | null = null;
 let trueCarSoundBuffer: AudioBuffer | null = null;
-let runningSoundBuffer: AudioBuffer | null = null;
-let soundVolumeMultiplier = 1;
 let chaseSoundBuffer: AudioBuffer | null = null;
 let lastChaseSoundAt = -Infinity;
 let deathSoundBuffer: AudioBuffer | null = null;
-let weaponAmmo = 0;
 const weaponMagazineSize = 7;
 let weaponReloading = false;
 let weaponReloadStartedAt = -Infinity;
@@ -4013,9 +3672,7 @@ let heartbeatFearLoopStart = 0;
 let heartbeatFearLoopEnd = 0;
 const heartbeatNormalPlaybackRate = 1;
 const heartbeatFearPlaybackRate = 1.35;
-const gunshotSoundReady = fetch(pistolSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const gunshotSoundReady = loadSoundBuffer(gunshotAudioContext, pistolSoundUrl)
   .then((buffer) => {
     gunshotBuffer = buffer;
   })
@@ -4026,9 +3683,7 @@ const knockSoundUrl = new URL(
   "../assets/sounds/universfield-door-knock-291150.mp3",
   import.meta.url,
 ).href;
-const knockSoundReady = fetch(knockSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const knockSoundReady = loadSoundBuffer(gunshotAudioContext, knockSoundUrl)
   .then((buffer) => {
     knockSoundBuffer = buffer;
   })
@@ -4040,9 +3695,10 @@ const carBreakSoundUrl = new URL(
   import.meta.url,
 ).href;
 let carBreakSoundBuffer: AudioBuffer | null = null;
-const carBreakSoundReady = fetch(carBreakSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const carBreakSoundReady = loadSoundBuffer(
+  gunshotAudioContext,
+  carBreakSoundUrl,
+)
   .then((buffer) => {
     carBreakSoundBuffer = buffer;
     carEndingShakePeaks = detectCarBreakPeaks(buffer);
@@ -4054,9 +3710,10 @@ const heartbeatSoundUrl = new URL(
   "../assets/sounds/freesound_community-heart-beating-128bpm-38384.mp3",
   import.meta.url,
 ).href;
-const heartbeatSoundReady = fetch(heartbeatSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const heartbeatSoundReady = loadSoundBuffer(
+  gunshotAudioContext,
+  heartbeatSoundUrl,
+)
   .then((buffer) => {
     heartbeatSoundBuffer = buffer;
     const peaks = detectHeartbeatPeaks(buffer);
@@ -4075,9 +3732,7 @@ const reloadSoundUrl = new URL(
   "../assets/sounds/freesound_community-9mm-pistol-load-and-chamber-98830.mp3",
   import.meta.url,
 ).href;
-const reloadSoundReady = fetch(reloadSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const reloadSoundReady = loadSoundBuffer(gunshotAudioContext, reloadSoundUrl)
   .then((buffer) => {
     reloadSoundBuffer = buffer;
   })
@@ -4088,9 +3743,7 @@ const dryFireSoundUrl = new URL(
   "../assets/sounds/spinopel-dry-fire-364846.mp3",
   import.meta.url,
 ).href;
-const dryFireSoundReady = fetch(dryFireSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const dryFireSoundReady = loadSoundBuffer(gunshotAudioContext, dryFireSoundUrl)
   .then((buffer) => {
     dryFireSoundBuffer = buffer;
   })
@@ -4101,9 +3754,7 @@ const chaseSoundUrl = new URL(
   "../assets/sounds/universfield-scary-string-tension-454849.mp3",
   import.meta.url,
 ).href;
-const chaseSoundReady = fetch(chaseSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const chaseSoundReady = loadSoundBuffer(gunshotAudioContext, chaseSoundUrl)
   .then((buffer) => {
     chaseSoundBuffer = buffer;
   })
@@ -4114,9 +3765,10 @@ const classroomBellUrl = new URL(
   "../assets/sounds/u_7t06dkcgzk-japanese-school-bell-sound-488954.mp3",
   import.meta.url,
 ).href;
-const classroomBellReady = fetch(classroomBellUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const classroomBellReady = loadSoundBuffer(
+  gunshotAudioContext,
+  classroomBellUrl,
+)
   .then((buffer) => {
     classroomBellBuffer = buffer;
   })
@@ -4127,9 +3779,7 @@ const deathSoundUrl = new URL(
   "../assets/sounds/universfield-horror-impact-454854.mp3",
   import.meta.url,
 ).href;
-const deathSoundReady = fetch(deathSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const deathSoundReady = loadSoundBuffer(gunshotAudioContext, deathSoundUrl)
   .then((buffer) => {
     deathSoundBuffer = buffer;
   })
@@ -4140,9 +3790,7 @@ const trueCarSoundUrl = new URL(
   "../assets/sounds/universfield-car-horn-02-153260.mp3",
   import.meta.url,
 ).href;
-const trueCarSoundReady = fetch(trueCarSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const trueCarSoundReady = loadSoundBuffer(gunshotAudioContext, trueCarSoundUrl)
   .then((buffer) => {
     trueCarSoundBuffer = buffer;
   })
@@ -4153,12 +3801,15 @@ const runningSoundUrl = new URL(
   "../assets/sounds/freeeverythingxx-running-on-concrete-268478.mp3",
   import.meta.url,
 ).href;
-const runningSoundReady = fetch(runningSoundUrl)
-  .then((response) => response.arrayBuffer())
-  .then((audioData) => gunshotAudioContext.decodeAudioData(audioData))
+const runningSoundReady = loadSoundBuffer(gunshotAudioContext, runningSoundUrl)
   .then((buffer) => {
-    runningSoundBuffer = buffer;
-    detectTwoFootstepClipDuration(buffer);
+    const analysis = analyzeRunningFootsteps(
+      buffer,
+      gunshotAudioContext,
+      runningFootstepInterval,
+    );
+    runningFootstepInterval = analysis.interval;
+    runningFootstepSamples = analysis.samples;
   })
   .catch((error: unknown) =>
     console.error("Running audio failed to load.", error),
@@ -4183,7 +3834,7 @@ function resolveWeaponForMode(_mode: ShootingMode): WeaponId {
 
 function saveCurrentWeaponProfile(): void {
   if (restoringSettings) return;
-  const profile = weaponProfiles[activeWeapon];
+  const profile = weaponProfiles[gameState.currentWeapon];
   profile.bulletSpeed = Number(bulletSpeedSetting.value);
   profile.recoil = Number(recoilSetting.value);
   profile.spread = Number(spreadSetting.value);
@@ -4223,13 +3874,13 @@ function applyWeaponProfile(weaponId: WeaponId): void {
 }
 
 function applyWeaponSelection(): void {
-  activeWeapon = resolveWeaponForMode(shootingMode);
-  applyWeaponProfile(activeWeapon);
+  gameState.currentWeapon = resolveWeaponForMode(shootingMode);
+  applyWeaponProfile(gameState.currentWeapon);
   stopAutomaticFire();
   scopeOverlay.classList.remove("is-visible");
-  if (coltModel) coltModel.visible = activeWeapon === "pistol";
+  if (coltModel) coltModel.visible = gameState.currentWeapon === "pistol";
   currentWeaponModel = coltModel;
-  const muzzlePosition = weaponMuzzlePositions.get(activeWeapon);
+  const muzzlePosition = weaponMuzzlePositions.get(gameState.currentWeapon);
   if (muzzlePosition) {
     modelMuzzle.position.copy(muzzlePosition);
     muzzleFlash.position.copy(modelMuzzle.position);
@@ -4246,13 +3897,13 @@ function applyWeaponSelection(): void {
 
 function playGunshot(): void {
   if (!gunshotBuffer) return;
+  const buffer = gunshotBuffer;
   const startGunshot = (): void => {
-    const source = gunshotAudioContext.createBufferSource();
-    const gain = gunshotAudioContext.createGain();
-    source.buffer = gunshotBuffer;
-    gain.gain.value = soundVolumeMultiplier;
-    source.connect(gain);
-    gain.connect(gunshotAudioContext.destination);
+    const { source } = createBufferedSound({
+      context: gunshotAudioContext,
+      buffer,
+      volume: getMasterVolumeMultiplier(),
+    });
     source.start();
   };
   if (gunshotAudioContext.state === "running") startGunshot();
@@ -4267,12 +3918,11 @@ function playGunshot(): void {
 
 function playDryFire(): void {
   if (!dryFireSoundBuffer) return;
-  const source = gunshotAudioContext.createBufferSource();
-  const gain = gunshotAudioContext.createGain();
-  source.buffer = dryFireSoundBuffer;
-  gain.gain.value = soundVolumeMultiplier;
-  source.connect(gain);
-  gain.connect(gunshotAudioContext.destination);
+  const { source } = createBufferedSound({
+    context: gunshotAudioContext,
+    buffer: dryFireSoundBuffer,
+    volume: getMasterVolumeMultiplier(),
+  });
   source.start();
 }
 
@@ -4281,30 +3931,28 @@ function playChaseSound(): void {
   const now = performance.now() / 1000;
   if (now - lastChaseSoundAt < 0.35) return;
   lastChaseSoundAt = now;
-  const source = gunshotAudioContext.createBufferSource();
-  const gain = gunshotAudioContext.createGain();
-  source.buffer = chaseSoundBuffer;
-  gain.gain.value = soundVolumeMultiplier;
-  source.connect(gain);
-  gain.connect(gunshotAudioContext.destination);
+  const { source } = createBufferedSound({
+    context: gunshotAudioContext,
+    buffer: chaseSoundBuffer,
+    volume: getMasterVolumeMultiplier(),
+  });
   source.start();
 }
 
-function playClassroomBell(now: number): void {
+function playClassroomBell(): void {
   if (
-    !_isInClassroom ||
-    gameplayPaused ||
+    !gameState.isInClassroom ||
+    gameState.isPaused ||
     classroomBellPlaying ||
     !classroomBellBuffer
   )
     return;
-  const source = gunshotAudioContext.createBufferSource();
-  const gain = gunshotAudioContext.createGain();
-  source.buffer = classroomBellBuffer;
-  source.playbackRate.value = classroomBellPlaybackRate;
-  gain.gain.value = soundVolumeMultiplier;
-  source.connect(gain);
-  gain.connect(gunshotAudioContext.destination);
+  const { source } = createBufferedSound({
+    context: gunshotAudioContext,
+    buffer: classroomBellBuffer,
+    volume: getMasterVolumeMultiplier(),
+    playbackRate: classroomBellPlaybackRate,
+  });
   classroomBellSource = source;
   classroomBellPlaying = true;
   classroomTeacherTurnPendingAt = -Infinity;
@@ -4325,26 +3973,26 @@ function playClassroomBell(now: number): void {
 }
 
 function updateClassroomBell(now: number): void {
-  if (!_isInClassroom || gameplayPaused || !controls.isLocked) return;
+  if (!gameState.isInClassroom || gameState.isPaused || !controls.isLocked)
+    return;
   if (!Number.isFinite(classroomBellNextAt)) {
-    void classroomBellReady.then(() => playClassroomBell(now));
+    void classroomBellReady.then(playClassroomBell);
     classroomBellNextAt = now;
     return;
   }
   if (now >= classroomBellNextAt) {
-    void classroomBellReady.then(() => playClassroomBell(now));
+    void classroomBellReady.then(playClassroomBell);
     classroomBellNextAt = Infinity;
   }
 }
 
 function playDeathSound(): void {
   if (!deathSoundBuffer) return;
-  const source = gunshotAudioContext.createBufferSource();
-  const gain = gunshotAudioContext.createGain();
-  source.buffer = deathSoundBuffer;
-  gain.gain.value = soundVolumeMultiplier;
-  source.connect(gain);
-  gain.connect(gunshotAudioContext.destination);
+  const { source } = createBufferedSound({
+    context: gunshotAudioContext,
+    buffer: deathSoundBuffer,
+    volume: getMasterVolumeMultiplier(),
+  });
   if (gunshotAudioContext.state === "suspended") {
     void gunshotAudioContext
       .resume()
@@ -4358,10 +4006,10 @@ function playDeathSound(): void {
 function startWeaponReload(): void {
   if (
     weaponReloading ||
-    !weaponPickupCollected ||
-    !weaponDrawn ||
-    weaponHolstering ||
-    weaponRaising ||
+    !gameState.weaponPickupCollected ||
+    !gameState.weaponDrawn ||
+    gameState.weaponHolstering ||
+    gameState.weaponRaising ||
     trueCarEntered
   )
     return;
@@ -4379,9 +4027,9 @@ function startWeaponReload(): void {
       !reloadSoundBuffer ||
       !weaponReloading ||
       generation !== reloadGeneration ||
-      !weaponDrawn ||
-      weaponHolstering ||
-      weaponRaising
+      !gameState.weaponDrawn ||
+      gameState.weaponHolstering ||
+      gameState.weaponRaising
     )
       return;
     camera.getWorldPosition(cameraOrigin);
@@ -4393,18 +4041,17 @@ function startWeaponReload(): void {
     );
     weaponReloadDuration = reloadSoundBuffer.duration;
     weaponReloadStartedAt = gunshotAudioContext.currentTime;
-    const source = gunshotAudioContext.createBufferSource();
+    const { source } = createBufferedSound({
+      context: gunshotAudioContext,
+      buffer: reloadSoundBuffer,
+      volume: getMasterVolumeMultiplier(),
+    });
     reloadSoundSource = source;
-    const gain = gunshotAudioContext.createGain();
-    source.buffer = reloadSoundBuffer;
-    gain.gain.value = soundVolumeMultiplier;
-    source.connect(gain);
-    gain.connect(gunshotAudioContext.destination);
     source.onended = () => {
       if (reloadSoundSource !== source || generation !== reloadGeneration)
         return;
       reloadSoundSource = null;
-      weaponAmmo = weaponMagazineSize;
+      gameState.weaponAmmo = weaponMagazineSize;
       weaponReloading = false;
       weaponReloadStartedAt = -Infinity;
       reloadPrompt.hidden = true;
@@ -4447,12 +4094,11 @@ function playKnockSound(onEnded?: () => void): void {
   if (!knockSoundBuffer) return;
   const startKnock = (): void => {
     if (!knockSoundBuffer) return;
-    const source = gunshotAudioContext.createBufferSource();
-    const gain = gunshotAudioContext.createGain();
-    source.buffer = knockSoundBuffer;
-    gain.gain.value = soundVolumeMultiplier;
-    source.connect(gain);
-    gain.connect(gunshotAudioContext.destination);
+    const { source } = createBufferedSound({
+      context: gunshotAudioContext,
+      buffer: knockSoundBuffer,
+      volume: getMasterVolumeMultiplier(),
+    });
     if (onEnded) source.addEventListener("ended", onEnded, { once: true });
     source.start();
   };
@@ -4466,70 +4112,15 @@ function playKnockSound(onEnded?: () => void): void {
       );
 }
 
-function detectCarBreakPeaks(buffer: AudioBuffer): number[] {
-  const samples = buffer.getChannelData(0);
-  const windowSize = Math.max(1, Math.floor(buffer.sampleRate * 0.01));
-  const envelope: number[] = [];
-  for (let offset = 0; offset < samples.length; offset += windowSize) {
-    let energy = 0;
-    const end = Math.min(samples.length, offset + windowSize);
-    for (let index = offset; index < end; index += 1)
-      energy += samples[index] ** 2;
-    envelope.push(Math.sqrt(energy / Math.max(1, end - offset)));
-  }
-  const candidates = envelope
-    .map((value, index) => ({ value, time: index * 0.01 }))
-    .filter(
-      (candidate, index) =>
-        candidate.value >= (envelope[index - 1] ?? 0) &&
-        candidate.value >= (envelope[index + 1] ?? 0),
-    )
-    .sort((first, second) => second.value - first.value);
-  const peaks: number[] = [];
-  for (const candidate of candidates) {
-    if (peaks.every((peak) => Math.abs(peak - candidate.time) >= 0.25))
-      peaks.push(candidate.time);
-    if (peaks.length === 2) break;
-  }
-  return peaks.sort((first, second) => first - second);
-}
-
-function detectHeartbeatPeaks(buffer: AudioBuffer): number[] {
-  const samples = buffer.getChannelData(0);
-  const windowSize = Math.max(1, Math.floor(buffer.sampleRate * 0.01));
-  const envelope: number[] = [];
-  for (let offset = 0; offset < samples.length; offset += windowSize) {
-    let energy = 0;
-    const end = Math.min(samples.length, offset + windowSize);
-    for (let index = offset; index < end; index += 1)
-      energy += samples[index] ** 2;
-    envelope.push(Math.sqrt(energy / Math.max(1, end - offset)));
-  }
-  const peakThreshold = Math.max(...envelope, 0) * 0.25;
-  const peaks: number[] = [];
-  for (let index = 1; index < envelope.length - 1; index += 1) {
-    if (
-      envelope[index] < peakThreshold ||
-      envelope[index] < envelope[index - 1] ||
-      envelope[index] < envelope[index + 1]
-    )
-      continue;
-    const time = index * 0.01;
-    if (peaks.every((peak) => time - peak >= 0.18)) peaks.push(time);
-  }
-  return peaks.slice(0, 2);
-}
-
 function playCarBreakSound(): void {
   if (!carBreakSoundBuffer) return;
   const startCarBreak = (): void => {
     if (!carBreakSoundBuffer) return;
-    const source = gunshotAudioContext.createBufferSource();
-    const gain = gunshotAudioContext.createGain();
-    source.buffer = carBreakSoundBuffer;
-    gain.gain.value = soundVolumeMultiplier;
-    source.connect(gain);
-    gain.connect(gunshotAudioContext.destination);
+    const { source } = createBufferedSound({
+      context: gunshotAudioContext,
+      buffer: carBreakSoundBuffer,
+      volume: getMasterVolumeMultiplier(),
+    });
     carEndingShakeStartedAt = performance.now() / 1000;
     source.start();
   };
@@ -4547,7 +4138,7 @@ function playHeartbeatSound(): void {
   if (
     !heartbeatSoundBuffer ||
     heartbeatSoundSource ||
-    gameplayPaused ||
+    gameState.isPaused ||
     !controls.isLocked ||
     document.hidden ||
     settingsOverlay.classList.contains("is-open")
@@ -4557,7 +4148,7 @@ function playHeartbeatSound(): void {
     if (
       !heartbeatSoundBuffer ||
       heartbeatSoundSource ||
-      gameplayPaused ||
+      gameState.isPaused ||
       !controls.isLocked ||
       document.hidden ||
       settingsOverlay.classList.contains("is-open")
@@ -4574,7 +4165,7 @@ function playHeartbeatSound(): void {
     source.playbackRate.value = fearActive
       ? heartbeatFearPlaybackRate
       : heartbeatNormalPlaybackRate;
-    gain.gain.value = soundVolumeMultiplier * 2;
+    gain.gain.value = getMasterVolumeMultiplier() * 2;
     source.connect(gain);
     gain.connect(gunshotAudioContext.destination);
     source.onended = () => {
@@ -4614,7 +4205,8 @@ function stopHeartbeatSound(): void {
 }
 
 function ensureHeartbeatSound(): void {
-  if (heartbeatSoundSource || heartbeatStartPending || gameplayPaused) return;
+  if (heartbeatSoundSource || heartbeatStartPending || gameState.isPaused)
+    return;
   heartbeatStartPending = true;
   void heartbeatSoundReady.then(() => {
     heartbeatStartPending = false;
@@ -4642,12 +4234,11 @@ function playRunningFootstep(): void {
         nextRunningFootstepIndex % runningFootstepSamples.length
       ];
     nextRunningFootstepIndex += 1;
-    const source = gunshotAudioContext.createBufferSource();
-    const gain = gunshotAudioContext.createGain();
-    source.buffer = sample;
-    gain.gain.value = soundVolumeMultiplier * runningFeedbackStrength;
-    source.connect(gain);
-    gain.connect(gunshotAudioContext.destination);
+    const { source, gain } = createBufferedSound({
+      context: gunshotAudioContext,
+      buffer: sample,
+      volume: getMasterVolumeMultiplier() * runningFeedbackStrength,
+    });
     runningFootstepSources.add(source);
     runningFootstepGains.set(source, gain);
     source.onended = () => {
@@ -4699,7 +4290,7 @@ function playTrueCarSound(): void {
   panner.positionY.value = trueCarWorldPosition.y;
   panner.positionZ.value = trueCarWorldPosition.z;
   source.buffer = trueCarSoundBuffer;
-  gain.gain.value = soundVolumeMultiplier;
+  gain.gain.value = getMasterVolumeMultiplier();
   source.connect(gain);
   gain.connect(panner);
   panner.connect(gunshotAudioContext.destination);
@@ -4713,10 +4304,10 @@ function playTrueCarSound(): void {
 }
 
 masterVolumeSetting.addEventListener("input", () => {
-  soundVolumeMultiplier = Number(masterVolumeSetting.value) / 100;
+  setMasterVolumePercent(Number(masterVolumeSetting.value));
   masterVolumeValue.value = `${masterVolumeSetting.value}%`;
   if (heartbeatSoundGain)
-    heartbeatSoundGain.gain.value = soundVolumeMultiplier * 2;
+    heartbeatSoundGain.gain.value = getMasterVolumeMultiplier() * 2;
 });
 
 function getMuzzleWorldPosition(): THREE.Vector3 {
@@ -4744,32 +4335,26 @@ const sprintSpreadMultiplier = 1.2;
 let aimingJumpSpreadMultiplier = 5.5;
 let hipfireJumpSpreadMultiplier = 4.5;
 function getShotSpread(moving: boolean, airborne: boolean): number {
-  const baseSpread = aiming ? aimingSpread : hipfireSpread;
-  const movementMultiplier = moving ? movementSpreadMultiplier : 1;
-  const sprintMultiplier =
-    moving && (keys.has("ShiftLeft") || keys.has("ShiftRight"))
-      ? sprintSpreadMultiplier
-      : 1;
-  const jumpMultiplier = airborne
-    ? aiming
-      ? aimingJumpSpreadMultiplier
-      : hipfireJumpSpreadMultiplier
-    : 1;
-  return (
-    baseSpread *
-    spreadMultiplier *
-    movementMultiplier *
-    sprintMultiplier *
-    jumpMultiplier
-  );
+  return calculateShotSpread({
+    aiming,
+    moving,
+    sprinting: keys.has("ShiftLeft") || keys.has("ShiftRight"),
+    airborne,
+    aimingSpread,
+    hipfireSpread,
+    spreadMultiplier,
+    movementSpreadMultiplier,
+    sprintSpreadMultiplier,
+    aimingJumpSpreadMultiplier,
+    hipfireJumpSpreadMultiplier,
+  });
 }
 
 function getSpreadPixels(moving: boolean, airborne: boolean): number {
-  const spreadAngle = getShotSpread(moving, airborne);
-  const fovRadians = THREE.MathUtils.degToRad(camera.fov);
-  const viewportHeight = canvas.clientHeight || 1;
-  return (
-    (Math.tan(spreadAngle) * viewportHeight) / (2 * Math.tan(fovRadians / 2))
+  return calculateSpreadPixels(
+    getShotSpread(moving, airborne),
+    camera.fov,
+    canvas.clientHeight || 1,
   );
 }
 
@@ -4790,7 +4375,7 @@ function triggerMuzzleFlash(): void {
 }
 
 function applyRecoil(): void {
-  const strength = (aiming ? 0.06 : 0.048) * recoilMultiplier;
+  const strength = calculateRecoilStrength(aiming, recoilMultiplier);
   recoilPitch += strength;
   weaponRecoilPitch += strength * 0.9;
   triggerMuzzleFlash();
@@ -4821,8 +4406,8 @@ function setAiming(nextAiming: boolean): void {
   if (
     nextAiming &&
     (!controls.isLocked ||
-      !weaponPickupCollected ||
-      !weaponDrawn ||
+      !gameState.weaponPickupCollected ||
+      !gameState.weaponDrawn ||
       trueCarEntered)
   )
     return;
@@ -4860,7 +4445,7 @@ function setAiming(nextAiming: boolean): void {
 
 function updatePointerSensitivity(): void {
   const baseSensitivity = Number(settingsSensitivity.value) * dpiMultiplier;
-  controls.pointerSpeed = baseSensitivity * (aiming ? adsSensitivityRatio : 1);
+  setPointerSensitivity(controls, baseSensitivity, adsSensitivityRatio, aiming);
 }
 
 function handlePointerDown(event: PointerEvent): void {
@@ -4875,8 +4460,8 @@ function handlePointerDown(event: PointerEvent): void {
     event.button === 0 &&
     controls.isLocked &&
     !trueCarEntered &&
-    weaponPickupCollected &&
-    weaponDrawn &&
+    gameState.weaponPickupCollected &&
+    gameState.weaponDrawn &&
     !weaponReloading
   ) {
     event.preventDefault();
@@ -4901,8 +4486,8 @@ function handleMouseDown(event: MouseEvent): void {
     event.button === 0 &&
     controls.isLocked &&
     !trueCarEntered &&
-    weaponPickupCollected &&
-    weaponDrawn &&
+    gameState.weaponPickupCollected &&
+    gameState.weaponDrawn &&
     !weaponReloading &&
     !leftButtonHeld
   ) {
@@ -4942,7 +4527,7 @@ document.addEventListener("mousedown", handleMouseDown);
 window.addEventListener("focus", () => {
   warmGunshotAudio();
   if (controls.isLocked) {
-    gameplayPaused = false;
+    gameState.isPaused = false;
     resumeGameplayAudio();
   }
 });
@@ -4970,7 +4555,7 @@ window.addEventListener("mouseup", (event) => {
 });
 window.addEventListener("blur", () => {
   cancelClassroomBackDoorOpening();
-  gameplayPaused = true;
+  gameState.isPaused = true;
   _aimButtonHeld = false;
   leftButtonHeld = false;
   stopAutomaticFire();
@@ -4980,12 +4565,12 @@ window.addEventListener("blur", () => {
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     cancelClassroomBackDoorOpening();
-    gameplayPaused = true;
+    gameState.isPaused = true;
     stopAutomaticFire();
     releaseAim();
     stopHeartbeatSound();
   } else if (controls.isLocked) {
-    gameplayPaused = false;
+    gameState.isPaused = false;
     resumeGameplayAudio();
   }
 });
@@ -5042,19 +4627,23 @@ recoilSetting.addEventListener("input", () => {
   recoilMultiplier = Number(recoilSetting.value) / 50;
   recoilValue.value = `${recoilSetting.value}%`;
   if (!restoringSettings)
-    weaponProfiles[activeWeapon].recoil = Number(recoilSetting.value);
+    weaponProfiles[gameState.currentWeapon].recoil = Number(
+      recoilSetting.value,
+    );
 });
 spreadSetting.addEventListener("input", () => {
   spreadMultiplier = Number(spreadSetting.value) / 50;
   spreadValue.value = `${spreadSetting.value}%`;
   if (!restoringSettings)
-    weaponProfiles[activeWeapon].spread = Number(spreadSetting.value);
+    weaponProfiles[gameState.currentWeapon].spread = Number(
+      spreadSetting.value,
+    );
 });
 movementSpreadSetting.addEventListener("input", () => {
   movementSpreadMultiplier = Number(movementSpreadSetting.value) / 100;
   movementSpreadValue.value = `${movementSpreadSetting.value}%`;
   if (!restoringSettings)
-    weaponProfiles[activeWeapon].movementSpread = Number(
+    weaponProfiles[gameState.currentWeapon].movementSpread = Number(
       movementSpreadSetting.value,
     );
 });
@@ -5062,7 +4651,7 @@ aimingJumpSpreadSetting.addEventListener("input", () => {
   aimingJumpSpreadMultiplier = Number(aimingJumpSpreadSetting.value) / 100;
   aimingJumpSpreadValue.value = `${aimingJumpSpreadSetting.value}%`;
   if (!restoringSettings)
-    weaponProfiles[activeWeapon].aimingJumpSpread = Number(
+    weaponProfiles[gameState.currentWeapon].aimingJumpSpread = Number(
       aimingJumpSpreadSetting.value,
     );
 });
@@ -5070,7 +4659,7 @@ hipfireJumpSpreadSetting.addEventListener("input", () => {
   hipfireJumpSpreadMultiplier = Number(hipfireJumpSpreadSetting.value) / 100;
   hipfireJumpSpreadValue.value = `${hipfireJumpSpreadSetting.value}%`;
   if (!restoringSettings)
-    weaponProfiles[activeWeapon].hipfireJumpSpread = Number(
+    weaponProfiles[gameState.currentWeapon].hipfireJumpSpread = Number(
       hipfireJumpSpreadSetting.value,
     );
 });
@@ -5078,7 +4667,9 @@ bulletDropSetting.addEventListener("input", () => {
   gravityMultiplier = Number(bulletDropSetting.value) / 100;
   bulletDropValue.value = `${bulletDropSetting.value}%`;
   if (!restoringSettings)
-    weaponProfiles[activeWeapon].bulletDrop = Number(bulletDropSetting.value);
+    weaponProfiles[gameState.currentWeapon].bulletDrop = Number(
+      bulletDropSetting.value,
+    );
 });
 trackingSpeedSetting.addEventListener("input", () => {
   trackingSpeed = Number(trackingSpeedSetting.value);
@@ -5123,129 +4714,35 @@ gridColorSetting.addEventListener("input", () => {
     material.color.set(gridColorSetting.value),
   );
 });
-const settingPixelsToRem = (value: string): string =>
-  `${Number(value) / 16}rem`;
-const formatSettingRem = (value: string): string =>
-  `${(Number(value) / 16).toFixed(4).replace(/\.?0+$/, "")}rem`;
-const syncSizeSettingLabel = (
-  setting: HTMLInputElement,
-  output: HTMLOutputElement,
-): void => {
-  output.value = formatSettingRem(setting.value);
-};
-
-const sizeLabelSettings: Array<[HTMLInputElement, HTMLOutputElement]> = [
-  [crosshairOutlineThicknessSetting, crosshairOutlineThicknessValue],
-  [crosshairGapSetting, crosshairGapValue],
-  [crosshairLengthSetting, crosshairLengthValue],
-  [crosshairThicknessSetting, crosshairThicknessValue],
-  [crosshairDotSizeSetting, crosshairDotSizeValue],
-  [crosshairCircleSizeSetting, crosshairCircleSizeValue],
-  [hitMarkerSizeSetting, hitMarkerSizeValue],
-  [hitMarkerLengthSetting, hitMarkerLengthValue],
-  [hitMarkerThicknessSetting, hitMarkerThicknessValue],
-  [hitMarkerGapSetting, hitMarkerGapValue],
-];
-sizeLabelSettings.forEach(([setting, output]) =>
-  syncSizeSettingLabel(setting, output),
-);
-
-crosshairStyleSetting.addEventListener("change", () => {
-  const styleClass =
-    {
-      "DOT + CROSS": "crosshair-dot-cross",
-      DOT: "crosshair-dot",
-      CROSS: "crosshair-cross",
-      CIRCLE: "crosshair-circle",
-    }[crosshairStyleSetting.value] ?? "crosshair-dot-cross";
-  crosshairPreviewTargets.forEach((crosshairTarget) => {
-    crosshairTarget.classList.remove(
-      "crosshair-dot-cross",
-      "crosshair-dot",
-      "crosshair-cross",
-      "crosshair-circle",
-    );
-    crosshairTarget.classList.add(styleClass);
-  });
-});
-crosshairColorSetting.addEventListener("input", () => {
-  crosshairPreviewTargets.forEach((crosshairTarget) =>
-    crosshairTarget.style.setProperty(
-      "--crosshair-color",
-      crosshairColorSetting.value,
-    ),
-  );
-});
-crosshairOutlineColorSetting.addEventListener("input", () => {
-  crosshairPreviewTargets.forEach((crosshairTarget) =>
-    crosshairTarget.style.setProperty(
-      "--crosshair-outline-color",
-      crosshairOutlineColorSetting.value,
-    ),
-  );
-});
-crosshairOutlineThicknessSetting.addEventListener("input", () => {
-  crosshairPreviewTargets.forEach((crosshairTarget) =>
-    crosshairTarget.style.setProperty(
-      "--crosshair-outline-thickness",
-      settingPixelsToRem(crosshairOutlineThicknessSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(
-    crosshairOutlineThicknessSetting,
-    crosshairOutlineThicknessValue,
-  );
-});
-crosshairGapSetting.addEventListener("input", () => {
-  crosshairPreviewTargets.forEach((crosshairTarget) =>
-    crosshairTarget.style.setProperty(
-      "--crosshair-gap",
-      settingPixelsToRem(crosshairGapSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(crosshairGapSetting, crosshairGapValue);
-});
-crosshairLengthSetting.addEventListener("input", () => {
-  crosshairPreviewTargets.forEach((crosshairTarget) =>
-    crosshairTarget.style.setProperty(
-      "--crosshair-length",
-      settingPixelsToRem(crosshairLengthSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(crosshairLengthSetting, crosshairLengthValue);
-});
-crosshairThicknessSetting.addEventListener("input", () => {
-  crosshairPreviewTargets.forEach((crosshairTarget) =>
-    crosshairTarget.style.setProperty(
-      "--crosshair-thickness",
-      settingPixelsToRem(crosshairThicknessSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(crosshairThicknessSetting, crosshairThicknessValue);
-});
-crosshairDotSizeSetting.addEventListener("input", () => {
-  crosshairPreviewTargets.forEach((crosshairTarget) =>
-    crosshairTarget.style.setProperty(
-      "--crosshair-dot-size",
-      settingPixelsToRem(crosshairDotSizeSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(crosshairDotSizeSetting, crosshairDotSizeValue);
-});
-crosshairCircleSizeSetting.addEventListener("input", () => {
-  crosshairPreviewTargets.forEach((crosshairTarget) =>
-    crosshairTarget.style.setProperty(
-      "--crosshair-circle-size",
-      settingPixelsToRem(crosshairCircleSizeSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(crosshairCircleSizeSetting, crosshairCircleSizeValue);
-});
-crosshairOpacitySetting.addEventListener("input", () => {
-  crosshairPreviewTargets.forEach((crosshairTarget) => {
-    crosshairTarget.style.opacity = `${Number(crosshairOpacitySetting.value) / 100}`;
-  });
-  crosshairOpacityValue.value = `${crosshairOpacitySetting.value}%`;
+bindSettingsPreviewEvents({
+  crosshairTargets: crosshairPreviewTargets,
+  hitMarkerTargets: hitMarkerPreviewTargets,
+  crosshairStyle: crosshairStyleSetting,
+  crosshairColor: crosshairColorSetting,
+  crosshairOutlineColor: crosshairOutlineColorSetting,
+  crosshairOutlineThickness: crosshairOutlineThicknessSetting,
+  crosshairOutlineThicknessValue,
+  crosshairGap: crosshairGapSetting,
+  crosshairGapValue,
+  crosshairLength: crosshairLengthSetting,
+  crosshairLengthValue,
+  crosshairThickness: crosshairThicknessSetting,
+  crosshairThicknessValue,
+  crosshairDotSize: crosshairDotSizeSetting,
+  crosshairDotSizeValue,
+  crosshairCircleSize: crosshairCircleSizeSetting,
+  crosshairCircleSizeValue,
+  crosshairOpacity: crosshairOpacitySetting,
+  crosshairOpacityValue,
+  hitMarkerColor: hitMarkerColorSetting,
+  hitMarkerSize: hitMarkerSizeSetting,
+  hitMarkerSizeValue,
+  hitMarkerLength: hitMarkerLengthSetting,
+  hitMarkerLengthValue,
+  hitMarkerThickness: hitMarkerThicknessSetting,
+  hitMarkerThicknessValue,
+  hitMarkerGap: hitMarkerGapSetting,
+  hitMarkerGapValue,
 });
 crosshairDynamicSetting.addEventListener("change", () => {
   crosshairDynamicEnabled = crosshairDynamicSetting.checked;
@@ -5262,69 +4759,12 @@ crosshairDynamicStrengthSetting.addEventListener("input", () => {
     Number(crosshairDynamicStrengthSetting.value) / 100;
   crosshairDynamicStrengthValue.value = `${crosshairDynamicStrengthSetting.value}%`;
 });
-hitMarkerColorSetting.addEventListener("input", () => {
-  hitMarkerPreviewTargets.forEach((hitMarkerTarget) =>
-    hitMarkerTarget.style.setProperty(
-      "--hit-marker-color",
-      hitMarkerColorSetting.value,
-    ),
-  );
-});
-hitMarkerSizeSetting.addEventListener("input", () => {
-  hitMarkerPreviewTargets.forEach((hitMarkerTarget) =>
-    hitMarkerTarget.style.setProperty(
-      "--hit-marker-size",
-      settingPixelsToRem(hitMarkerSizeSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(hitMarkerSizeSetting, hitMarkerSizeValue);
-});
-hitMarkerLengthSetting.addEventListener("input", () => {
-  hitMarkerPreviewTargets.forEach((hitMarkerTarget) =>
-    hitMarkerTarget.style.setProperty(
-      "--hit-marker-length",
-      settingPixelsToRem(hitMarkerLengthSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(hitMarkerLengthSetting, hitMarkerLengthValue);
-});
-hitMarkerThicknessSetting.addEventListener("input", () => {
-  hitMarkerPreviewTargets.forEach((hitMarkerTarget) =>
-    hitMarkerTarget.style.setProperty(
-      "--hit-marker-thickness",
-      settingPixelsToRem(hitMarkerThicknessSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(hitMarkerThicknessSetting, hitMarkerThicknessValue);
-});
-hitMarkerGapSetting.addEventListener("input", () => {
-  hitMarkerPreviewTargets.forEach((hitMarkerTarget) =>
-    hitMarkerTarget.style.setProperty(
-      "--hit-marker-gap",
-      settingPixelsToRem(hitMarkerGapSetting.value),
-    ),
-  );
-  syncSizeSettingLabel(hitMarkerGapSetting, hitMarkerGapValue);
-});
 hitMarkerDurationSetting.addEventListener("input", () => {
   hitMarkerDuration = Number(hitMarkerDurationSetting.value);
   hitMarkerDurationValue.value = `${hitMarkerDuration.toFixed(2)}s`;
 });
 
-settingsCategoryButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    const category = button.dataset.category;
-    settingsCategoryButtons.forEach((categoryButton) =>
-      categoryButton.classList.toggle("is-active", categoryButton === button),
-    );
-    settingsCategoryPanels.forEach((panel) =>
-      panel.classList.toggle(
-        "is-visible",
-        panel.dataset.categoryPanel === category,
-      ),
-    );
-  });
-});
+bindSettingsCategories(settingsCategoryButtons, settingsCategoryPanels);
 
 fovSetting.addEventListener("input", () => {
   baseFov = Number(fovSetting.value);
@@ -5337,15 +4777,14 @@ resolutionScaleSetting.addEventListener("input", () => {
   resolutionScale = Number(resolutionScaleSetting.value) / 100;
   resolutionScaleValue.value = `${resolutionScaleSetting.value}%`;
   renderer.setPixelRatio(getRenderPixelRatio());
-  resizeRenderer();
+  resizeGameRenderer(renderer, camera, canvas);
 });
 
-const keys = new Set<string>();
+const keyInput = createKeyInputState();
+const { keys } = keyInput;
 const movement = new THREE.Vector3();
 const direction = new THREE.Vector3();
 const jumpMomentumDirection = new THREE.Vector3();
-const jumpMomentumForward = new THREE.Vector3();
-const jumpMomentumRight = new THREE.Vector3();
 const playerHeight = 3.4;
 const playerCollisionRadius = 0.18;
 const gravity = 18;
@@ -5427,53 +4866,33 @@ function isKeyWithinPickupRange(): boolean {
 }
 
 function updateKeyInteractionPrompt(): void {
-  weaponModePrompt.hidden = !controls.isLocked;
-  weaponModePrompt
-    .querySelectorAll<HTMLElement>(".weapon-key-hint")
-    .forEach((hint) => {
-      hint.hidden = !weaponPickupCollected;
-    });
-  if (_isInClassroom) {
-    keyPickupPrompt.hidden = true;
-    weaponPickupPrompt.hidden = !isWeaponWithinPickupRange();
-    trueCarPrompt.hidden = true;
-    vehicleSearchHint.textContent = "PRESS [F] TO OPEN BACK DOOR";
-    const showBackDoorPrompt =
-      !classroomBackDoorOpening && isClassroomBackDoorWithinInteractionRange();
-    vehicleSearchHint.classList.toggle(
-      "interaction-prompt",
-      showBackDoorPrompt,
-    );
-    vehicleSearchHint.hidden = !showBackDoorPrompt;
-    classroomSeatPrompt.hidden =
-      !weaponPickupCollected || !isClassroomSeatWithinInteractionRange();
-    if (classroomSeatActive) {
-      vehicleSearchHint.textContent = "PRESS [F] TO STAND UP";
-      vehicleSearchHint.hidden = !weaponPickupPrompt.hidden;
-    }
-    return;
-  }
-  if (_isInChess) {
-    vehicleSearchHint.classList.remove("interaction-prompt");
-    keyPickupPrompt.hidden = true;
-    weaponPickupPrompt.hidden = true;
-    vehicleSearchHint.hidden = true;
-    trueCarPrompt.hidden = true;
-    classroomSeatPrompt.hidden = true;
-    return;
-  }
-  vehicleSearchHint.classList.remove("interaction-prompt");
-  classroomSeatPrompt.hidden = !isClassroomSeatWithinInteractionRange();
-  keyPickupPrompt.hidden = !isKeyWithinPickupRange();
-  weaponPickupPrompt.hidden = !isWeaponWithinPickupRange();
-  vehicleSearchHint.hidden = !keyPickupCollected;
-  trueCarPrompt.hidden = !isTrueCarWithinInteractionRange();
+  const mode = gameState.isInClassroom
+    ? "classroom"
+    : gameState.isInChess
+      ? "chess"
+      : "parking-lot";
+  renderInteractionPrompts({
+    elements: hudOverlayElements,
+    mode,
+    controlsLocked: controls.isLocked,
+    weaponPickupCollected: gameState.weaponPickupCollected,
+    weaponInRange: mode !== "chess" && isWeaponWithinPickupRange(),
+    classroomBackDoorOpening,
+    backDoorInRange:
+      mode === "classroom" && isClassroomBackDoorWithinInteractionRange(),
+    classroomSeatActive,
+    classroomSeatInRange:
+      mode !== "chess" && isClassroomSeatWithinInteractionRange(),
+    keyInRange: mode === "parking-lot" && isKeyWithinPickupRange(),
+    keyPickupCollected,
+    trueCarInRange: mode === "parking-lot" && isTrueCarWithinInteractionRange(),
+  });
 }
 
 function isClassroomBackDoorWithinInteractionRange(): boolean {
   if (
     !controls.isLocked ||
-    !_isInClassroom ||
+    !gameState.isInClassroom ||
     classroomSeatActive ||
     classroomBackDoorOpened
   )
@@ -5498,7 +4917,7 @@ function isClassroomBackDoorWithinInteractionRange(): boolean {
 }
 
 function isClassroomSeatWithinInteractionRange(): boolean {
-  if (!controls.isLocked || !_isInClassroom || classroomSeatActive)
+  if (!controls.isLocked || !gameState.isInClassroom || classroomSeatActive)
     return false;
   if (
     camera.position.distanceTo(classroomSeatPosition) >
@@ -5526,9 +4945,9 @@ function sitAtClassroomSeat(force = false): void {
       student.quaternion.copy(initialRotation);
     }
   });
-  playerSprintActive = false;
-  keys.delete("ShiftLeft");
-  keys.delete("ShiftRight");
+  gameState.playerSprintActive = false;
+  keyInput.delete("ShiftLeft");
+  keyInput.delete("ShiftRight");
   classroomStudentKnockdownUntil.clear();
   classroomStudentsAlerted = false;
   classroomTeacherStudentTurnAt = -Infinity;
@@ -5551,14 +4970,15 @@ function sitAtClassroomSeat(force = false): void {
 }
 
 function updateClassroomStudentsFacingPlayer(): void {
-  if (!_isInClassroom) return;
-  if (!classroomSeatActive) {
-    alertClassroomStudents(performance.now() / 1000);
-  }
-  if (classroomSeatActive && !classroomStudentsAlerted) return;
-  classroomStudents.forEach((student) => {
-    if (classroomDeadStudents.has(student)) return;
-    student.lookAt(camera.position.x, student.position.y, camera.position.z);
+  updateClassroomStudentFacing({
+    classroomActive: gameState.isInClassroom,
+    seatActive: classroomSeatActive,
+    studentsAlerted: classroomStudentsAlerted,
+    students: classroomStudents,
+    deadStudents: classroomDeadStudents,
+    cameraPosition: camera.position,
+    now: performance.now() / 1000,
+    alertStudents: alertClassroomStudents,
   });
 }
 
@@ -5567,41 +4987,23 @@ function knockDownClassroomStudent(
   now: number,
   impactDirection?: THREE.Vector3,
 ): void {
-  if (classroomDeadStudents.has(student)) return;
-  classroomDeadStudents.add(student);
-  classroomStudentKnockdownUntil.set(student, Infinity);
-  alertClassroomStudents(now);
-  gsap.killTweensOf(student.rotation);
-  gsap.killTweensOf(student.quaternion);
-  const direction =
-    impactDirection?.clone().normalize() ?? new THREE.Vector3(0, 0, 1);
-  direction.y = 0;
-  direction.normalize();
-  const fallAxis = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
-  const fallQuaternion = new THREE.Quaternion().setFromAxisAngle(
-    fallAxis,
-    -Math.PI / 2,
-  );
-  const targetQuaternion = student.quaternion
-    .clone()
-    .premultiply(fallQuaternion);
-  gsap.to(student.quaternion, {
-    x: targetQuaternion.x,
-    y: targetQuaternion.y,
-    z: targetQuaternion.z,
-    w: targetQuaternion.w,
-    duration: 0.18,
-    ease: "power2.out",
+  knockDownClassroomStudentRuntime({
+    student,
+    now,
+    deadStudents: classroomDeadStudents,
+    knockdownUntil: classroomStudentKnockdownUntil,
+    alertStudents: alertClassroomStudents,
+    impactDirection,
   });
 }
 
 function updateClassroomFearState(): void {
   if (
-    !_isInClassroom ||
+    !gameState.isInClassroom ||
     classroomSeatActive ||
     classroomStudents.length === 0
   ) {
-    if (_isInClassroom || classroomSeatActive) {
+    if (gameState.isInClassroom || classroomSeatActive) {
       classroomFearActive = false;
       fearActive = classroomFearActive;
       fearOverlay.classList.remove("is-visible");
@@ -5609,22 +5011,12 @@ function updateClassroomFearState(): void {
     }
     return;
   }
-  const allStudentsWatching = classroomStudents.every((student) => {
-    if (!student.visible || student.position.distanceTo(camera.position) > 45)
-      return false;
-    student.getWorldDirection(classroomStudentLookDirection);
-    classroomStudentToPlayerDirection
-      .copy(camera.position)
-      .sub(student.position)
-      .normalize();
-    return (
-      classroomStudentLookDirection.dot(classroomStudentToPlayerDirection) >=
-        0.2 ||
-      classroomStudentLookDirection
-        .clone()
-        .negate()
-        .dot(classroomStudentToPlayerDirection) >= 0.92
-    );
+  const allStudentsWatching = areAllClassroomStudentsWatching({
+    students: classroomStudents,
+    cameraPosition: camera.position,
+    maxDistance: 45,
+    lookDirection: classroomStudentLookDirection,
+    toPlayerDirection: classroomStudentToPlayerDirection,
   });
   classroomFearActive = allStudentsWatching;
   fearActive = classroomFearActive;
@@ -5636,7 +5028,7 @@ function isWeaponWithinPickupRange(): boolean {
   if (
     !controls.isLocked ||
     !weaponPickupObject ||
-    weaponPickupCollected ||
+    gameState.weaponPickupCollected ||
     !weaponPickupObject.visible
   )
     return false;
@@ -5658,20 +5050,20 @@ function isWeaponWithinPickupRange(): boolean {
 
 function collectWeaponPickup(): void {
   if (!isWeaponWithinPickupRange() || !weaponPickupObject) return;
-  weaponPickupCollected = true;
+  gameState.weaponPickupCollected = true;
   weaponPickupObject.visible = false;
   weapon.visible = true;
   weaponPickupPrompt.hidden = true;
-  weaponDrawn = true;
+  gameState.weaponDrawn = true;
 }
 
 function setWeaponDrawn(drawn: boolean): void {
-  if (!weaponPickupCollected || trueCarEntered) return;
+  if (!gameState.weaponPickupCollected || trueCarEntered) return;
   if (drawn) {
-    if (weaponDrawn && !weaponHolstering) return;
-    weaponHolstering = false;
-    weaponRaising = true;
-    weaponDrawn = true;
+    if (gameState.weaponDrawn && !gameState.weaponHolstering) return;
+    gameState.weaponHolstering = false;
+    gameState.weaponRaising = true;
+    gameState.weaponDrawn = true;
     weapon.visible = true;
     gsap.killTweensOf(weapon.position);
     gsap.killTweensOf(weapon.rotation);
@@ -5684,7 +5076,7 @@ function setWeaponDrawn(drawn: boolean): void {
       duration: 0.3,
       ease: "power2.out",
       onComplete: () => {
-        weaponRaising = false;
+        gameState.weaponRaising = false;
       },
     });
     gsap.to(weapon.rotation, {
@@ -5695,10 +5087,10 @@ function setWeaponDrawn(drawn: boolean): void {
       ease: "power2.out",
     });
   } else {
-    if (weaponHolstering || !weaponDrawn) return;
+    if (gameState.weaponHolstering || !gameState.weaponDrawn) return;
     if (weaponReloading) cancelWeaponReload();
-    weaponHolstering = true;
-    weaponRaising = false;
+    gameState.weaponHolstering = true;
+    gameState.weaponRaising = false;
     setAiming(false);
     stopAutomaticFire();
     gsap.killTweensOf(weapon.position);
@@ -5717,9 +5109,9 @@ function setWeaponDrawn(drawn: boolean): void {
       duration: 0.3,
       ease: "power2.in",
       onComplete: () => {
-        if (!weaponHolstering) return;
-        weaponHolstering = false;
-        weaponDrawn = false;
+        if (!gameState.weaponHolstering) return;
+        gameState.weaponHolstering = false;
+        gameState.weaponDrawn = false;
         weapon.visible = false;
       },
     });
@@ -5730,35 +5122,43 @@ function setWeaponDrawn(drawn: boolean): void {
   weaponModePrompt
     .querySelectorAll<HTMLElement>(".weapon-key-hint")
     .forEach((hint) => {
-      hint.hidden = !weaponPickupCollected;
+      hint.hidden = !gameState.weaponPickupCollected;
     });
 }
 
 function placeWeaponPickupWhenReady(): void {
   if (!weaponPickupObject) return;
-  const activeRoot = _isInClassroom ? classroomRoot : parkingLotRoot;
-  const activeBounds = _isInClassroom ? classroomBounds : parkingBounds;
-  if (!activeRoot || !activeBounds || (!_isInClassroom && !parkedCarsReady)) {
+  const activeRoot = gameState.isInClassroom ? classroomRoot : parkingLotRoot;
+  const activeBounds = gameState.isInClassroom
+    ? classroomBounds
+    : parkingBounds;
+  if (
+    !activeRoot ||
+    !activeBounds ||
+    (!gameState.isInClassroom && !parkedCarsReady)
+  ) {
     requestAnimationFrame(placeWeaponPickupWhenReady);
     return;
   }
-  if (_isInClassroom) {
+  if (gameState.isInClassroom) {
     weaponPickupObject.position.copy(classroomWeaponSpawnPosition);
     weaponPickupObject.rotation.set(
       0,
       Math.random() * Math.PI * 2,
       Math.PI / 2,
     );
-    weaponPickupObject.visible = !weaponPickupCollected;
+    weaponPickupObject.visible = !gameState.weaponPickupCollected;
     scene.add(weaponPickupObject);
     return;
   }
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const angle = Math.random() * Math.PI * 2;
-    const distance = _isInClassroom
+    const distance = gameState.isInClassroom
       ? THREE.MathUtils.randFloat(1.2, 2.8)
       : THREE.MathUtils.randFloat(3, 8);
-    const origin = _isInClassroom ? classroomSeatPosition : camera.position;
+    const origin = gameState.isInClassroom
+      ? classroomSeatPosition
+      : camera.position;
     const x = origin.x + Math.cos(angle) * distance;
     const z = origin.z + Math.sin(angle) * distance;
     if (
@@ -5769,7 +5169,7 @@ function placeWeaponPickupWhenReady(): void {
     )
       continue;
     if (
-      !_isInClassroom &&
+      !gameState.isInClassroom &&
       overlapsMatryoshkaVehicleObstacle(x, z, matryoshkaObstaclePadding)
     )
       continue;
@@ -5787,11 +5187,11 @@ function placeWeaponPickupWhenReady(): void {
       Math.random() * Math.PI * 2,
       Math.PI / 2,
     );
-    weaponPickupObject.visible = !weaponPickupCollected;
+    weaponPickupObject.visible = !gameState.weaponPickupCollected;
     scene.add(weaponPickupObject);
     return;
   }
-  if (_isInClassroom) {
+  if (gameState.isInClassroom) {
     weaponPickupObject.position.set(
       classroomSeatExitPosition.x,
       classroomSeatExitPosition.y + 0.35,
@@ -5802,7 +5202,7 @@ function placeWeaponPickupWhenReady(): void {
       Math.random() * Math.PI * 2,
       Math.PI / 2,
     );
-    weaponPickupObject.visible = !weaponPickupCollected;
+    weaponPickupObject.visible = !gameState.weaponPickupCollected;
     scene.add(weaponPickupObject);
     return;
   }
@@ -5908,15 +5308,14 @@ function openClassroomBackDoor(): void {
     return;
   classroomBackDoorOpening = true;
   classroomBackDoorOpeningStartedAt = performance.now();
-  classroomDoorProgressRing.hidden = false;
-  classroomDoorProgressFill.style.strokeDashoffset = `${classroomDoorProgressCircumference}`;
+  renderClassroomDoorProgress(hudOverlayElements, 0);
   updateKeyInteractionPrompt();
   classroomBackDoorOpeningTimer = window.setTimeout(() => {
-    if (!_isInClassroom || !classroomBackDoorOpening) return;
+    if (!gameState.isInClassroom || !classroomBackDoorOpening) return;
     classroomBackDoorOpeningTimer = null;
     classroomBackDoorOpening = false;
     classroomBackDoorOpened = true;
-    classroomDoorProgressRing.hidden = true;
+    renderClassroomDoorProgress(hudOverlayElements, null);
     classroomBackDoorOpeningStartedAt = -Infinity;
     episodeFadeOverlay.classList.add("is-complete");
     void deathSoundReady.then(playDeathSound);
@@ -5931,8 +5330,7 @@ function cancelClassroomBackDoorOpening(): void {
   if (!classroomBackDoorOpening) return;
   classroomBackDoorOpening = false;
   classroomBackDoorOpeningStartedAt = -Infinity;
-  classroomDoorProgressRing.hidden = true;
-  classroomDoorProgressFill.style.strokeDashoffset = `${classroomDoorProgressCircumference}`;
+  renderClassroomDoorProgress(hudOverlayElements, null);
   if (classroomBackDoorOpeningTimer !== null) {
     window.clearTimeout(classroomBackDoorOpeningTimer);
     classroomBackDoorOpeningTimer = null;
@@ -5951,9 +5349,7 @@ function updateClassroomBackDoorProgress(): void {
     0,
     1,
   );
-  classroomDoorProgressFill.style.strokeDashoffset = `${
-    classroomDoorProgressCircumference * (1 - progress)
-  }`;
+  renderClassroomDoorProgress(hudOverlayElements, progress);
 }
 
 function updateTrueCarSeatPosition(): void {
@@ -6002,7 +5398,7 @@ function updateTrueCarSoundIndicator(): void {
 
 function lockPointer(): void {
   if (controls.isLocked) return;
-  controls.lock(rawInputEnabled);
+  lockPointerControls(controls, rawInputEnabled);
 }
 
 async function toggleFullscreen(): Promise<void> {
@@ -6023,101 +5419,87 @@ function updateFullscreenButton(): void {
   fullscreenButton.title = isFullscreen
     ? "Exit fullscreen"
     : "Enter fullscreen";
-  resizeRenderer();
+  resizeGameRenderer(renderer, camera, canvas);
 }
 
 function handleKeyDown(event: KeyboardEvent): void {
-  if (playerDeathActive) {
+  if (gameState.playerDeathActive) {
     event.preventDefault();
     return;
   }
-  if (event.code === "Escape") {
-    if (episodeScreen.classList.contains("is-visible")) {
-      event.preventDefault();
-      episodeScreen.classList.remove("is-visible");
-      startScreen.classList.add("is-visible");
-      return;
-    }
-    if (startScreen.classList.contains("is-visible")) {
-      event.preventDefault();
-      if (window.confirm("EXIT ESCAPE?")) exitApplication();
-      return;
-    }
-    if (controls.isLocked) {
-      event.preventDefault();
-      classroomSeatActive = false;
-      controls.unlock();
-      return;
-    }
-    if (window.electronAPI) {
-      event.preventDefault();
-      if (settingsOverlay.classList.contains("is-open")) {
-        if (screenFlow.getActiveMenuView() === "home") enterGame();
-        else showMenuView("home");
-      } else {
-        openMenu();
-      }
-      return;
-    }
-    if (document.fullscreenElement) {
-      event.preventDefault();
-      void document.exitFullscreen();
-      return;
-    }
-    event.preventDefault();
-    if (!settingsOverlay.classList.contains("is-open")) openMenu();
-    else if (screenFlow.getActiveMenuView() === "home") closeMenu();
-    else showMenuView("home");
+  if (
+    handleEscapeHotkey(event, {
+      startScreen,
+      episodeScreen,
+      settingsOverlay,
+      controlsLocked: controls.isLocked,
+      electronApp: Boolean(window.electronAPI),
+      fullscreenActive: Boolean(document.fullscreenElement),
+      unlockControls: () => {
+        classroomSeatActive = false;
+        controls.unlock();
+      },
+      confirmExit: () => {
+        if (window.confirm("EXIT ESCAPE?")) exitApplication();
+      },
+      exitFullscreen: () => void document.exitFullscreen(),
+      getActiveMenuView: screenFlow.getActiveMenuView,
+      enterGame,
+      openMenu,
+      closeMenu,
+      showMenuView,
+    })
+  )
     return;
-  }
-  if (event.code === "KeyF") {
-    if (isWeaponWithinPickupRange()) {
-      collectWeaponPickup();
-    } else if (isClassroomBackDoorWithinInteractionRange()) {
-      openClassroomBackDoor();
-    } else if (classroomSeatActive && _isInClassroom) {
-      classroomSeatActive = false;
-      classroomSeatExitCameraPosition.copy(classroomSeatExitPosition);
-      classroomSeatExitCameraPosition.y += playerHeight;
-      camera.position.copy(classroomSeatExitCameraPosition);
-      camera.updateMatrixWorld(true);
-      verticalVelocity = 0;
-      isGrounded = true;
-      lastSafePlayerPosition.copy(camera.position);
-      hasSafePlayerPosition = true;
-      updateKeyInteractionPrompt();
-    } else if (isClassroomSeatWithinInteractionRange()) sitAtClassroomSeat();
-    else if (keyPickupCollected) enterTrueCar();
-    else collectKeyPickup();
+  if (
+    handleWeaponHotkey(event, {
+      controlsLocked: controls.isLocked,
+      keyPickupCollected,
+      trueCarEntered,
+      setWeaponDrawn,
+      startWeaponReload,
+      playTrueCarSound,
+    })
+  )
     return;
-  }
-  if (event.code === "Digit1" || event.code === "Numpad1") {
-    setWeaponDrawn(true);
+  if (
+    handleInteractionHotkey(event, {
+      isWeaponWithinPickupRange,
+      collectWeaponPickup,
+      isClassroomBackDoorWithinInteractionRange,
+      openClassroomBackDoor,
+      classroomSeatActive,
+      isInClassroom: gameState.isInClassroom,
+      standFromClassroomSeat: () => {
+        classroomSeatActive = false;
+        classroomSeatExitCameraPosition.copy(classroomSeatExitPosition);
+        classroomSeatExitCameraPosition.y += playerHeight;
+        camera.position.copy(classroomSeatExitCameraPosition);
+        camera.updateMatrixWorld(true);
+        verticalVelocity = 0;
+        isGrounded = true;
+        lastSafePlayerPosition.copy(camera.position);
+        hasSafePlayerPosition = true;
+        updateKeyInteractionPrompt();
+      },
+      isClassroomSeatWithinInteractionRange,
+      sitAtClassroomSeat,
+      keyPickupCollected,
+      enterTrueCar,
+      collectKeyPickup,
+    })
+  )
     return;
-  }
-  if (event.code === "Digit2" || event.code === "Numpad2") {
-    setWeaponDrawn(false);
-    return;
-  }
-  if (event.code === "KeyP") {
-    if (controls.isLocked && keyPickupCollected && !trueCarEntered)
-      playTrueCarSound();
-    return;
-  }
-  if (event.code === "KeyR") {
-    if (controls.isLocked) startWeaponReload();
-    return;
-  }
-  keys.add(event.code);
+  keyInput.add(event.code);
   if (
     event.code === "Space" &&
     controls.isLocked &&
-    !_isInClassroom &&
+    !gameState.isInClassroom &&
     isGrounded &&
-    playerStamina >= PLAYER_JUMP_STAMINA_COST
+    gameState.playerStamina >= PLAYER_JUMP_STAMINA_COST
   ) {
     event.preventDefault();
-    playerStamina -= PLAYER_JUMP_STAMINA_COST;
+    gameState.playerStamina -= PLAYER_JUMP_STAMINA_COST;
     jumpMomentumActive =
       keys.has("KeyW") ||
       keys.has("KeyA") ||
@@ -6127,47 +5509,27 @@ function handleKeyDown(event: KeyboardEvent): void {
       keys.has("KeyW") &&
       !weaponReloading &&
       (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
-      playerSprintActive;
-    if (jumpMomentumActive) {
-      jumpMomentumSpeed = sprintJumpRequested
-        ? playerWalkSpeed +
-          (playerRunSpeed - playerWalkSpeed) *
-            playerSprintAcceleration *
-            getStaminaSprintFactor()
-        : playerWalkSpeed;
-      camera.updateWorldMatrix(true, false);
-      camera.getWorldDirection(jumpMomentumForward);
-      jumpMomentumForward.y = 0;
-      jumpMomentumForward.normalize();
-      jumpMomentumRight.setFromMatrixColumn(camera.matrixWorld, 0);
-      jumpMomentumRight.y = 0;
-      jumpMomentumRight.normalize();
-      jumpMomentumDirection
-        .copy(jumpMomentumRight)
-        .multiplyScalar(Number(keys.has("KeyD")) - Number(keys.has("KeyA")))
-        .addScaledVector(
-          jumpMomentumForward,
-          Number(keys.has("KeyW")) - Number(keys.has("KeyS")),
-        );
-      if (jumpMomentumDirection.lengthSq() > 0)
-        jumpMomentumDirection.normalize();
-      else {
-        jumpMomentumActive = false;
-        jumpMomentumSpeed = playerWalkSpeed;
-      }
-    }
+      gameState.playerSprintActive;
+    const jumpMomentum = calculateJumpMomentum({
+      camera,
+      keys,
+      sprintJumpRequested,
+      walkSpeed: playerWalkSpeed,
+      runSpeed: playerRunSpeed,
+      sprintAcceleration: gameState.playerSprintAcceleration,
+      staminaSprintFactor: getStaminaSprintFactor(),
+    });
+    jumpMomentumActive = jumpMomentum.active;
+    jumpMomentumSpeed = jumpMomentum.speed;
+    jumpMomentumDirection.copy(jumpMomentum.direction);
     verticalVelocity = jumpVelocity;
     isGrounded = false;
   }
 }
 
-function handleKeyUp(event: KeyboardEvent): void {
-  keys.delete(event.code);
-}
-
 function handleLockChange(): void {
   const locked = controls.isLocked;
-  gameplayPaused = !locked;
+  gameState.isPaused = !locked;
   if (!locked) releaseAim();
   if (locked) resumeGameplayAudio();
   range.classList.toggle("is-locked", locked);
@@ -6184,7 +5546,7 @@ const screenFlow = bindScreenFlow(
 );
 
 function showLoadingScreen(label: string, percent = 0): void {
-  if (gameplayStarted && !episodeEntryLoading) return;
+  if (gameState.gameplayStarted && !gameState.episodeEntryLoading) return;
   range.classList.add("is-loading");
   loadingScreen.classList.add("is-visible");
   loadingTitle.textContent = "PREPARING ESCAPE";
@@ -6193,7 +5555,7 @@ function showLoadingScreen(label: string, percent = 0): void {
 }
 
 function _hideLoadingScreen(force = false): void {
-  if (gameplayStarted && !force) return;
+  if (gameState.gameplayStarted && !force) return;
   range.classList.remove("is-loading");
   loadingScreen.classList.remove("is-visible");
   loadingBarFill.style.width = "0%";
@@ -6204,9 +5566,9 @@ function showMenuView(view: "home" | "mode" | "settings"): void {
 }
 
 function openMenu(): void {
-  if (playerDeathActive) return;
+  if (gameState.playerDeathActive) return;
   cancelClassroomBackDoorOpening();
-  gameplayPaused = true;
+  gameState.isPaused = true;
   if (controls.isLocked) controls.unlock();
   if (gunshotAudioContext.state === "running")
     void gunshotAudioContext.suspend();
@@ -6215,12 +5577,12 @@ function openMenu(): void {
 }
 
 function syncPauseMenu(): void {
-  if (playerDeathActive) {
+  if (gameState.playerDeathActive) {
     settingsOverlay.classList.remove("is-open");
     return;
   }
   const shouldShowPauseMenu = !controls.isLocked;
-  gameplayPaused = shouldShowPauseMenu || document.hidden;
+  gameState.isPaused = shouldShowPauseMenu || document.hidden;
   if (shouldShowPauseMenu) showMenuView("home");
   if (shouldShowPauseMenu) {
     if (gunshotAudioContext.state === "running")
@@ -6239,19 +5601,21 @@ function closeMenu(): void {
 }
 
 function syncEpisodeOnlyObjects(): void {
-  const parkingObjectsVisible = !_isInChess && !_isInClassroom;
-  chessLightRig.visible = _isInChess;
+  const parkingObjectsVisible =
+    !gameState.isInChess && !gameState.isInClassroom;
+  chessLightRig.visible = gameState.isInChess;
   classroomStudents.forEach((student) => {
-    student.visible = _isInClassroom;
+    student.visible = gameState.isInClassroom;
   });
   if (keyPickupObject)
     keyPickupObject.visible = parkingObjectsVisible && !keyPickupCollected;
   if (weaponPickupObject)
     weaponPickupObject.visible =
-      (_isInClassroom || parkingObjectsVisible) && !weaponPickupCollected;
+      (gameState.isInClassroom || parkingObjectsVisible) &&
+      !gameState.weaponPickupCollected;
   matryoshkaMobs.forEach((mob) => {
     const mobVisible = mob.classroomOnly
-      ? _isInClassroom
+      ? gameState.isInClassroom
       : parkingObjectsVisible;
     mob.object.visible = mobVisible;
     mob.visionIndicator.visible = mobVisible && matryoshkaVisionSetting.checked;
@@ -6266,14 +5630,15 @@ const enterEpisode = createEpisodeEntryController({
   showLoadingScreen,
   hideLoadingScreen: _hideLoadingScreen,
   setEpisodeEntryLoading: (loading) => {
-    episodeEntryLoading = loading;
+    gameState.episodeEntryLoading = loading;
   },
   setGameplayStarted: () => {
-    gameplayStarted = true;
+    gameState.gameplayStarted = true;
   },
   setEpisodeFlags: (episodeId) => {
-    _isInChess = episodeId === "chess";
-    _isInClassroom = episodeId === "classroom";
+    gameState.currentEpisode = episodeId;
+    gameState.isInChess = episodeId === "chess";
+    gameState.isInClassroom = episodeId === "classroom";
     jumpMomentumActive = false;
     parkingLotFearActive = false;
     classroomFearActive = false;
@@ -6345,44 +5710,32 @@ bindEpisodeSelection(
   chessEpisodeButton,
   selectEpisode,
 );
-settingsButton.addEventListener("click", () => {
-  if (
-    startScreen.classList.contains("is-visible") ||
-    episodeScreen.classList.contains("is-visible")
-  ) {
-    showMenuView("settings");
-    settingsOverlay.classList.add("is-open");
-    settingsOverlay.setAttribute("aria-hidden", "false");
-  } else openMenu();
-});
-settingsClose.addEventListener("click", () => {
-  const isInGameplay =
-    gameplayStarted &&
-    !startScreen.classList.contains("is-visible") &&
-    !episodeScreen.classList.contains("is-visible");
-  closeMenu();
-  if (isInGameplay) lockPointer();
-});
-menuSettingsButton.addEventListener("click", () => showMenuView("settings"));
-menuExitButton.addEventListener("click", () => {
-  if (startScreen.classList.contains("is-visible")) exitApplication();
-  else returnToEpisodeSelect();
-});
-settingsOverlay.addEventListener("click", (event) => {
-  if (event.target === settingsOverlay) settingsClose.click();
-});
-fullscreenButton.addEventListener("click", () => {
-  void toggleFullscreen();
+bindPauseMenuControls({
+  startScreen,
+  episodeScreen,
+  settingsButton,
+  settingsClose,
+  settingsOverlay,
+  menuSettingsButton,
+  menuExitButton,
+  fullscreenButton,
+  showSettings: () => showMenuView("settings"),
+  openMenu,
+  closeMenu,
+  isGameplayStarted: () => gameState.gameplayStarted,
+  lockPointer,
+  exitApplication,
+  returnToEpisodeSelect,
+  toggleFullscreen,
 });
 document.addEventListener("fullscreenchange", updateFullscreenButton);
-document.addEventListener("keydown", handleKeyDown);
-document.addEventListener("keyup", handleKeyUp);
+bindKeyInputHandlers(keyInput, handleKeyDown);
 document.addEventListener("pointerlockchange", syncPauseMenu);
 controls.addEventListener("lock", handleLockChange);
 controls.addEventListener("unlock", handleLockChange);
 canvas.addEventListener("click", () => {
   if (
-    gameplayStarted &&
+    gameState.gameplayStarted &&
     !controls.isLocked &&
     !startScreen.classList.contains("is-visible") &&
     !episodeScreen.classList.contains("is-visible") &&
@@ -6437,7 +5790,7 @@ bulletSpeedSetting.addEventListener("input", () => {
   projectileVelocity = Number(bulletSpeedSetting.value);
   bulletSpeedValue.value = bulletSpeedSetting.value;
   if (!restoringSettings)
-    weaponProfiles[activeWeapon].bulletSpeed = projectileVelocity;
+    weaponProfiles[gameState.currentWeapon].bulletSpeed = projectileVelocity;
 });
 
 const weaponPreviewScene = new THREE.Scene();
@@ -6585,7 +5938,7 @@ function getPlayerCollisionHeightBounds(): THREE.Vector2 {
       }
     }
   }
-  if (_isInClassroom) {
+  if (gameState.isInClassroom) {
     return new THREE.Vector2(
       camera.position.y - playerHeight,
       camera.position.y + 0.2,
@@ -6596,14 +5949,14 @@ function getPlayerCollisionHeightBounds(): THREE.Vector2 {
 }
 
 function resolveParkingCollision(): void {
-  const activeBounds = _isInChess
+  const activeBounds = gameState.isInChess
     ? chessBounds
-    : _isInClassroom
+    : gameState.isInClassroom
       ? classroomBounds
       : parkingBounds;
-  const activeRoot = _isInChess
+  const activeRoot = gameState.isInChess
     ? chessRoot
-    : _isInClassroom
+    : gameState.isInClassroom
       ? classroomRoot
       : parkingLotRoot;
   if (!activeBounds || !activeRoot) return;
@@ -6651,7 +6004,7 @@ function resolveParkingCollision(): void {
   if (
     !hasGround &&
     verticalVelocity < 0 &&
-    _isInChess &&
+    gameState.isInChess &&
     camera.position.y < activeBounds.min.y + playerHeight &&
     activeBounds.min.y + playerHeight <= camera.position.y + 0.3
   ) {
@@ -6674,9 +6027,9 @@ function resolveParkingCollision(): void {
   }
   const playerHeightBounds = getPlayerCollisionHeightBounds();
   const collisionEpsilon = 0.01;
-  const nearbyObstacles = _isInChess
+  const nearbyObstacles = gameState.isInChess
     ? []
-    : _isInClassroom
+    : gameState.isInClassroom
       ? classroomObstacles
       : getNearbyParkingObstacles();
   for (const obstacle of nearbyObstacles) {
@@ -6714,7 +6067,7 @@ function movePlayerWithCollision(distance: THREE.Vector3): void {
   for (let stepIndex = 0; stepIndex < stepCount; stepIndex += 1) {
     const rightStep = new THREE.Vector3(step.x, 0, 0);
     const forwardStep = new THREE.Vector3(0, 0, step.z);
-    if (_isInClassroom) {
+    if (gameState.isInClassroom) {
       controls.moveRight(rightStep.x);
       controls.moveForward(forwardStep.z);
       resolveParkingCollision();
@@ -6743,9 +6096,9 @@ function movePlayerWithJumpMomentum(delta: number): void {
 }
 
 function isWorldWallAhead(direction: THREE.Vector3, distance: number): boolean {
-  const activeRoot = _isInChess
+  const activeRoot = gameState.isInChess
     ? chessRoot
-    : _isInClassroom
+    : gameState.isInClassroom
       ? classroomRoot
       : parkingLotRoot;
   if (!activeRoot) return false;
@@ -6772,9 +6125,9 @@ function isWorldWallAhead(direction: THREE.Vector3, distance: number): boolean {
 }
 
 function isParkingWallAhead(step: THREE.Vector3): boolean {
-  const activeRoot = _isInChess
+  const activeRoot = gameState.isInChess
     ? chessRoot
-    : _isInClassroom
+    : gameState.isInClassroom
       ? classroomRoot
       : parkingLotRoot;
   if (!activeRoot) return false;
@@ -7129,7 +6482,7 @@ modeButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setShootingMode(button.dataset.mode as ShootingMode);
     closeMenu();
-    controls.lock(rawInputEnabled);
+    lockPointerControls(controls, rawInputEnabled);
   });
 });
 
@@ -7259,9 +6612,9 @@ function updateProjectiles(now: number, delta: number): void {
     const projectileHits =
       travelDistance > 0
         ? findMapProjectileHits({
-            episodeId: _isInClassroom
+            episodeId: gameState.isInClassroom
               ? "classroom"
-              : _isInChess
+              : gameState.isInChess
                 ? "chess"
                 : "parking-lot",
             raycaster: parkingProjectileRaycaster,
@@ -7292,7 +6645,7 @@ function updateProjectiles(now: number, delta: number): void {
     const projectileExpired = now - projectile.bornAt > projectileLifetime;
     if (
       projectileHitLogSetting.checked &&
-      _isInClassroom &&
+      gameState.isInClassroom &&
       (classroomStudentAccepted ||
         parkingSurfaceHit ||
         hitFloor ||
@@ -7574,8 +6927,9 @@ function createImpactSpark(
 }
 
 function fireShot(): void {
-  if (trueCarEntered || !weaponPickupCollected || weaponReloading) return;
-  if (weaponAmmo <= 0) {
+  if (trueCarEntered || !gameState.weaponPickupCollected || weaponReloading)
+    return;
+  if (gameState.weaponAmmo <= 0) {
     if (reloadPromptFadeTimer !== null)
       window.clearTimeout(reloadPromptFadeTimer);
     reloadPrompt.classList.remove("is-fading");
@@ -7593,7 +6947,7 @@ function fireShot(): void {
     void dryFireSoundReady.then(playDryFire);
     return;
   }
-  weaponAmmo -= 1;
+  gameState.weaponAmmo -= 1;
   playGunshot();
   applyRecoil();
   shotOrigin.copy(getMuzzleWorldPosition());
@@ -7602,9 +6956,6 @@ function fireShot(): void {
   camera.getWorldDirection(shotDirection);
   cameraRight.setFromMatrixColumn(camera.matrixWorld, 0);
   cameraUp.setFromMatrixColumn(camera.matrixWorld, 1);
-  aimPoint
-    .copy(cameraOrigin)
-    .addScaledVector(shotDirection, projectileAimDistance);
   const movingAtShot =
     controls.isLocked &&
     (keys.has("KeyW") ||
@@ -7614,26 +6965,21 @@ function fireShot(): void {
   const airborneAtShot =
     controls.isLocked && camera.position.y > playerHeight + 0.05;
   const shotSpread = getShotSpread(movingAtShot, airborneAtShot);
-  const horizontalSpread =
-    (Math.random() - 0.5) * shotSpread * projectileAimDistance;
-  const verticalSpread =
-    (Math.random() - 0.5) * shotSpread * projectileAimDistance;
-  aimPoint.addScaledVector(cameraRight, horizontalSpread);
-  aimPoint.addScaledVector(cameraUp, verticalSpread);
-  shotDirection.copy(aimPoint).sub(shotOrigin).normalize();
+  calculateShotDirection({
+    cameraPosition: cameraOrigin,
+    forward: shotDirection,
+    right: cameraRight,
+    up: cameraUp,
+    muzzlePosition: shotOrigin,
+    aimDistance: projectileAimDistance,
+    spread: shotSpread,
+    aimPoint,
+    direction: shotDirection,
+  });
   spawnProjectile(shotDirection, shotOrigin);
 }
 
-function resizeRenderer(): void {
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  renderer.setSize(width, height, false);
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
-}
-
-window.addEventListener("resize", resizeRenderer);
-resizeRenderer();
+bindRendererResize(renderer, camera, canvas);
 
 const clock = new THREE.Clock();
 let weaponSwayFactor = 0;
@@ -7650,7 +6996,7 @@ function render(): void {
   if (maxFps > 0 && frameNow - lastFrameAt < 1000 / maxFps) return;
   lastFrameAt = frameNow;
   const delta = Math.min(clock.getDelta(), 0.05);
-  const elapsed = clock.getElapsedTime();
+  const _elapsed = clock.getElapsedTime();
   if (!cameraBobQuaternion.equals(identityQuaternion)) {
     camera.quaternion.multiply(cameraBobQuaternion.invert());
     cameraBobQuaternion.identity();
@@ -7658,7 +7004,7 @@ function render(): void {
   camera.position.y -= cameraBobOffset;
   cameraBobOffset = 0;
   if (
-    (gameplayPaused && !playerDeathActive) ||
+    (gameState.isPaused && !gameState.playerDeathActive) ||
     startScreen.classList.contains("is-visible") ||
     episodeScreen.classList.contains("is-visible") ||
     settingsOverlay.classList.contains("is-open") ||
@@ -7671,9 +7017,12 @@ function render(): void {
   updateClassroomBackDoorProgress();
   updateProjectiles(performance.now() / 1000, delta);
   updateMatryoshkaMobs(performance.now() / 1000, delta);
-  if (playerDeathActive) {
-    playerDeathElapsed = Math.min(playerDeathElapsed + delta, 1.2);
-    const deathProgress = 1 - Math.exp(-5 * playerDeathElapsed);
+  if (gameState.playerDeathActive) {
+    gameState.playerDeathElapsed = Math.min(
+      gameState.playerDeathElapsed + delta,
+      1.2,
+    );
+    const deathProgress = 1 - Math.exp(-5 * gameState.playerDeathElapsed);
     camera.position.copy(playerDeathStartPosition);
     camera.position.y -= 2.1 * deathProgress;
     playerDeathRotation.setFromEuler(
@@ -7706,20 +7055,20 @@ function render(): void {
       keys.has("KeyW") &&
       !weaponReloading &&
       (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
-      playerSprintActive;
+      gameState.playerSprintActive;
     const sprintAccelerationTarget =
       sprintRequested ||
       (jumpMomentumActive && jumpMomentumSpeed > playerWalkSpeed)
         ? 1
         : 0;
-    playerSprintAcceleration +=
-      (sprintAccelerationTarget - playerSprintAcceleration) *
+    gameState.playerSprintAcceleration +=
+      (sprintAccelerationTarget - gameState.playerSprintAcceleration) *
       Math.min(1, delta * 3.5);
     frameSprintSpeed = jumpMomentumActive
       ? jumpMomentumSpeed
       : playerWalkSpeed +
         (playerRunSpeed - playerWalkSpeed) *
-          playerSprintAcceleration *
+          gameState.playerSprintAcceleration *
           getStaminaSprintFactor();
     if (jumpMomentumActive) {
       movePlayerWithJumpMomentum(delta);
@@ -7743,7 +7092,7 @@ function render(): void {
   if (isGrounded) {
     if (jumpMomentumActive) {
       const staminaFactor = getStaminaSprintFactor();
-      playerSprintAcceleration =
+      gameState.playerSprintAcceleration =
         staminaFactor > 0
           ? THREE.MathUtils.clamp(
               (jumpMomentumSpeed - playerWalkSpeed) /
@@ -7787,7 +7136,7 @@ function render(): void {
 
   runningFeedbackStrength = getStaminaSprintFactor();
   runningFootstepGains.forEach((gain) => {
-    gain.gain.value = soundVolumeMultiplier * runningFeedbackStrength;
+    gain.gain.value = getMasterVolumeMultiplier() * runningFeedbackStrength;
   });
   const isMoving = controls.isLocked && direction.lengthSq() > 0;
   const isRunning =
@@ -7869,7 +7218,7 @@ function render(): void {
   weaponRecoilVisual +=
     (weaponRecoilPitch - weaponRecoilVisual) * (1 - Math.exp(-42 * delta));
   const weaponKick = weaponRecoilVisual * 0.8;
-  if (!weaponHolstering && !weaponRaising) {
+  if (!gameState.weaponHolstering && !gameState.weaponRaising) {
     weapon.position.set(
       weaponPosition.x +
         Math.sin((movementBobPhase * weaponSwayRate) / 7) * swayAmount,
@@ -7910,9 +7259,18 @@ antialiasingSetting.addEventListener("change", () => {
 });
 
 restoreSettingsFromStorage();
-sizeLabelSettings.forEach(([setting, output]) =>
-  syncSizeSettingLabel(setting, output),
-);
+syncSizeSettingLabels([
+  [crosshairOutlineThicknessSetting, crosshairOutlineThicknessValue],
+  [crosshairGapSetting, crosshairGapValue],
+  [crosshairLengthSetting, crosshairLengthValue],
+  [crosshairThicknessSetting, crosshairThicknessValue],
+  [crosshairDotSizeSetting, crosshairDotSizeValue],
+  [crosshairCircleSizeSetting, crosshairCircleSizeValue],
+  [hitMarkerSizeSetting, hitMarkerSizeValue],
+  [hitMarkerLengthSetting, hitMarkerLengthValue],
+  [hitMarkerThicknessSetting, hitMarkerThicknessValue],
+  [hitMarkerGapSetting, hitMarkerGapValue],
+]);
 applyWeaponSelection();
 const shouldShowEpisodeSelectOnLoad =
   sessionStorage.getItem("escape-return-to-episode-select") === "true";
@@ -7920,19 +7278,20 @@ sessionStorage.removeItem("escape-return-to-episode-select");
 startScreen.classList.toggle("is-visible", !shouldShowEpisodeSelectOnLoad);
 episodeScreen.classList.toggle("is-visible", shouldShowEpisodeSelectOnLoad);
 const savedEpisode = getStoredEpisodeId();
+gameState.currentEpisode = savedEpisode;
 if (savedEpisode === "classroom") {
-  _isInClassroom = true;
-  _isInChess = false;
+  gameState.isInClassroom = true;
+  gameState.isInChess = false;
 } else if (savedEpisode === "chess") {
-  _isInClassroom = false;
-  _isInChess = true;
+  gameState.isInClassroom = false;
+  gameState.isInChess = true;
 } else {
-  _isInClassroom = false;
-  _isInChess = false;
+  gameState.isInClassroom = false;
+  gameState.isInChess = false;
 }
 restoreEpisodeVisibility(savedEpisode, {
   parkingLotRoot,
   classroomRoot,
   chessRoot,
 });
-renderer.setAnimationLoop(render);
+startGameLoop(renderer, render);

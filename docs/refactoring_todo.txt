@@ -1,0 +1,52 @@
+====================================================================
+[REFACTORING TODO] escapeGame.ts 완전 폐지 및 main.ts 오케스트레이션 구축
+====================================================================
+
+[Phase 1] 폴더 구조 확충 및 공유 상태(State) 설계
+[x] 1.1. 신규 폴더 생성: src/game/input/, src/game/audio/, src/game/mobs/
+[x] 1.2. src/game/runtime/gameState.ts 생성
+       - escapeGame.ts 상단의 글로벌 state 변수들(isPaused, currentEpisode, currentWeapon 등) 추출
+       - 타입 정의 및 외부 모듈 참조용 getter/setter 또는 state 객체 export
+       - 완료: pause, episode/mode, loading/death, weapon, stamina/sprint 핵심 상태를 타입 있는 객체로 추출
+
+[Phase 2] 독립적 보조 모듈 추출 (의존성 낮은 순)
+[ ] 2.1. UI & DOM 분리 (src/game/ui/)
+       - [x] appShell.ts: app.innerHTML DOM HTML 템플릿 생성 로직 이관
+       - hudOverlay.ts: Crosshair, HitMarker, Stamina, Interaction Prompt DOM 제어 분리
+       - 진행: HUD 요소 생성, 상호작용 프롬프트, 문 진행 링 DOM 갱신을 분리했으며 crosshair/hit-marker/death overlay 제어는 남음
+[ ] 2.2. Settings & Preview 분리 (src/game/settings/)
+       - settingsUI.ts: 환경설정 이벤드 바인딩 및 프리뷰 캔버스(Crosshair/HitMarker) 이관
+       - 진행: 프리뷰 DOM/표시 이벤트와 설정 카테고리 전환을 분리했으며 기타 설정 이벤트는 남음
+[ ] 2.3. Audio 분리 (src/game/audio/)
+       - soundManager.ts: 효과음, BGM, Master Volume 제어 로직 추출
+       - 진행: Master Volume, 버퍼 로더/재생 노드와 car-break/heartbeat/footstep 분석을 분리했으며 루프/BGM/공간 오디오는 남음
+[ ] 2.4. Input & Controls 분리 (src/game/input/)
+       - [x] pointerControls.ts: PointerLockControls 및 마우스 감도/Raw Input 처리
+       - keyInput.ts: 이동(WASD), 상호작용(F, R, P), 무기 전환(1, 2) 키보드 이벤트 핸들러 분리
+       - 진행: 키 상태/listener/keyup, Escape/F, 1·2·P·R hotkey, jump momentum 계산은 분리했으며 Space 비용/수직 impulse와 게임 액션은 escapeGame.ts에 남음
+
+[Phase 3] 핵심 시스템 모듈 추출
+[ ] 3.1. AI & Mobs 분리 (src/game/mobs/)
+       - matryoshkaMob.ts: 마트료시카 경로 탐색(findRoute), 추적/패트롤 AI, 피격/기절 로직 분리
+       - 진행: 상태 전이, wander target/patrol 선택, knockdown을 분리했으며 추적 tick과 물리 이동은 escapeGame.ts에 남음
+       - classroomTeacher.ts: 교실 맵 선생님 클론 AI 및 배치 로직 분리
+       - 진행: 학생 facing/fear, knockdown, clone turn timing을 분리했으며 선생님 AI orchestration은 escapeGame.ts에 남음
+[ ] 3.2. Combat & Weapon 분리 (src/game/combat/)
+       - weaponController.ts: 사격, 반동, ADS 조준, 탄도학, 탄알 집탄률(Spread) 계산 이관
+       - 진행: 무기 리그, spread/탄도 방향, 반동 강도 계산은 분리했으며 사격 orchestration/ADS/반동 적용은 escapeGame.ts에 남음
+[ ] 3.3. Runtime & Engine 분리 (src/game/runtime/)
+       - [x] physicsWorld.ts: Rapier3D 월드 관리
+       - gameLoop.ts: Three.js 렌더러 루프/resize 등록 및 viewport 업데이트
+       - playerMovement.ts: 카메라 기준 점프 방향/속도 계산
+       - 진행: render() 본체와 프레임 업데이트는 escapeGame.ts에 남음
+
+[Phase 4] 엔트리 포인트 일치화 및 정리
+[ ] 4.1. src/game/main.ts 작성
+       - 분리된 모듈들의 init() 함수 순차 호출 및 초기화 오케스트레이션 구축
+       - 코드 분량을 100줄 이내로 간결화
+       - 진행: Rapier 초기화 후 escapeGame을 동적 로드하며 분리 모듈별 init 오케스트레이션은 미구현
+[x] 4.2. src/main.ts 확인
+       - import "./game/main"; 정상 연결 확인
+[ ] 4.3. 파일 삭제 및 빌드 검증
+       - src/game/escapeGame.ts 파일 완전 삭제
+       - pnpm build / npm run build 실행 후 빌드 에러 및 런타임 동작 테스트
