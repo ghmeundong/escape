@@ -148,8 +148,12 @@ export function createWeaponRig(): {
   };
 }
 
+export const PLAYER_MAX_STAMINA = 220;
+export const PLAYER_JUMP_STAMINA_COST = 22;
+
 export function tickPlayerStaminaRuntime(params: {
   delta: number;
+  isGrounded: boolean;
   controls: PointerLockControls;
   keys: Set<string>;
   trueCarEntered: boolean;
@@ -161,6 +165,7 @@ export function tickPlayerStaminaRuntime(params: {
 }): { playerStamina: number; playerSprintActive: boolean } {
   const {
     delta,
+    isGrounded,
     controls,
     keys,
     trueCarEntered,
@@ -171,8 +176,7 @@ export function tickPlayerStaminaRuntime(params: {
     staminaBarFill,
   } = params;
 
-  const sprintModifierHeld =
-    keys.has("ShiftLeft") || keys.has("ShiftRight");
+  const sprintModifierHeld = keys.has("ShiftLeft") || keys.has("ShiftRight");
   const sprintPressed =
     controls.isLocked &&
     !trueCarEntered &&
@@ -181,7 +185,7 @@ export function tickPlayerStaminaRuntime(params: {
     !weaponReloading &&
     sprintModifierHeld;
 
-  const playerMaxStamina = 130;
+  const playerMaxStamina = PLAYER_MAX_STAMINA;
   const playerSprintThresholdRatio = 0.3;
   const playerStaminaDrainPerSecond = 34;
   const playerStaminaRegenPerSecond = 22;
@@ -193,7 +197,9 @@ export function tickPlayerStaminaRuntime(params: {
     playerStamina > 0.01 &&
     (playerSprintActive || playerStamina >= playerSprintThreshold);
 
-  if (!sprintModifierHeld) {
+  if (!isGrounded) {
+    // Keep stamina unchanged while airborne.
+  } else if (!sprintPressed) {
     playerSprintActive = false;
     playerStamina = Math.min(
       playerMaxStamina,

@@ -9,10 +9,7 @@ import {
   setStoredEpisodeId,
   type EpisodeId,
 } from "./episodes/episodes";
-import {
-  startEpisode,
-  restoreEpisodeVisibility,
-} from "./episodes/episodeFlow";
+import { startEpisode, restoreEpisodeVisibility } from "./episodes/episodeFlow";
 import {
   bindSettingsPersistence,
   restoreSettings,
@@ -21,6 +18,8 @@ import {
 import {
   createSharedPhysicsWorld,
   createWeaponRig,
+  PLAYER_JUMP_STAMINA_COST,
+  PLAYER_MAX_STAMINA,
   tickPlayerStaminaRuntime,
 } from "./shared/runtime/commonRuntime";
 import {
@@ -976,7 +975,7 @@ const matryoshkaMinWanderDistance = 35;
 const matryoshkaObstaclePadding = 0.3;
 const playerWalkSpeed = 3.8;
 const playerRunSpeed = 11.5;
-const playerMaxStamina = 130;
+const playerMaxStamina = PLAYER_MAX_STAMINA;
 const playerStaminaDrainPerSecond = 34;
 const playerStaminaRegenPerSecond = 22;
 const playerSprintThresholdRatio = 0.3;
@@ -984,7 +983,7 @@ const playerSprintThreshold = playerMaxStamina * playerSprintThresholdRatio;
 let playerStamina = playerMaxStamina;
 let playerSprintActive = false;
 let playerSprintAcceleration = 0;
-let sprintJumpSpeed = playerWalkSpeed;
+let jumpMomentumSpeed = playerWalkSpeed;
 let runningFootstepInterval = 0.5;
 let runningFootstepClipDuration = runningFootstepInterval * 2;
 let runningFootstepLoopStart = 0;
@@ -992,10 +991,7 @@ let runningFootstepCyclesPerLoop = 1;
 let runningFootstepPeakTimes: number[] = [];
 let runningFootstepSamples: AudioBuffer[] = [];
 const runningFootstepSources = new Set<AudioBufferSourceNode>();
-const runningFootstepGains = new Map<
-  AudioBufferSourceNode,
-  GainNode
->();
+const runningFootstepGains = new Map<AudioBufferSourceNode, GainNode>();
 let nextRunningFootstepIndex = 0;
 let runningStepPhase = 0;
 let runningFeedbackStrength = 1;
@@ -1232,6 +1228,7 @@ function returnToEpisodeSelect(): void {
 function updatePlayerStamina(delta: number): void {
   const nextStamina = tickPlayerStaminaRuntime({
     delta,
+    isGrounded,
     controls,
     keys,
     trueCarEntered,
@@ -1264,7 +1261,7 @@ function restartCurrentEpisode(): void {
   resetRecoilState();
   verticalVelocity = 0;
   isGrounded = false;
-  sprintingInAir = false;
+  jumpMomentumActive = false;
   cancelWeaponReload();
   weaponAmmo = 0;
   weapon.visible = false;
@@ -1312,7 +1309,9 @@ function restartCurrentEpisode(): void {
   classroomStudents.forEach((student) => {
     gsap.killTweensOf(student.rotation);
     gsap.killTweensOf(student.quaternion);
-    student.quaternion.copy(classroomStudentInitialRotations.get(student) ?? student.quaternion);
+    student.quaternion.copy(
+      classroomStudentInitialRotations.get(student) ?? student.quaternion,
+    );
   });
   if (trueCar) trueCar.visible = true;
   keyEspObjects.forEach((outline) => {
@@ -2131,15 +2130,13 @@ function createParkingLotMatryoshkaClone(sourceMob: MatryoshkaMob): void {
 function createClassroomTeacherClone(sourceMob: MatryoshkaMob): void {
   sourceMob.object.updateMatrixWorld(true);
   const sourcePosition = sourceMob.object.getWorldPosition(new THREE.Vector3());
-  const sourceFloorY = new THREE.Box3()
-    .setFromObject(sourceMob.object)
-    .min.y;
+  const sourceFloorY = new THREE.Box3().setFromObject(sourceMob.object).min.y;
   const spawnPosition = findClassroomTeacherClonePosition({
     sourcePosition,
     floorY: sourceFloorY,
     bounds: classroomBounds,
-    existingPositions: matryoshkaMobs.map(
-      (mob) => mob.object.getWorldPosition(new THREE.Vector3()),
+    existingPositions: matryoshkaMobs.map((mob) =>
+      mob.object.getWorldPosition(new THREE.Vector3()),
     ),
     routeSide: sourceMob.routeSide,
   });
@@ -2281,10 +2278,7 @@ function recoverMatryoshkaMob(mob: MatryoshkaMob): void {
   chooseMatryoshkaTarget(mob);
 }
 
-function updateClassroomTeacherClone(
-  mob: MatryoshkaMob,
-  now: number,
-): void {
+function updateClassroomTeacherClone(mob: MatryoshkaMob, now: number): void {
   if (!mob.classroomTurned && now >= mob.classroomNextTurnAt) {
     mob.object.quaternion.copy(mob.initialQuaternion);
     mob.object.rotateY(Math.PI);
@@ -2331,18 +2325,22 @@ function checkClassroomTeacherDanger(
     Math.abs(teacherScreenPosition.y) <= 1;
   const playerIsLookingAtTeacher =
     teacherIsOnScreen &&
-    playerForward.dot(cameraToTeacher) >= Math.cos(THREE.MathUtils.degToRad(45));
+    playerForward.dot(cameraToTeacher) >=
+      Math.cos(THREE.MathUtils.degToRad(45));
   if (weaponDrawn || !classroomSeatActive || !playerIsLookingAtTeacher)
     triggerClassroomDangerDeath(teacher, now);
 }
 
 function updateClassroomTeacher(now: number): void {
-  if (teacherAiSetting.checked || !classroomTeacher || classroomTeacher.knockedDownAt > 0)
+  if (
+    teacherAiSetting.checked ||
+    !classroomTeacher ||
+    classroomTeacher.knockedDownAt > 0
+  )
     return;
   if (classroomTeacherReturning) {
     const returnProgress = THREE.MathUtils.clamp(
-      (now - classroomTeacherReturnStartedAt) /
-        classroomTeacherReturnDuration,
+      (now - classroomTeacherReturnStartedAt) / classroomTeacherReturnDuration,
       0,
       1,
     );
@@ -2719,7 +2717,8 @@ function spawnMatryoshkaMob(
         : !_isInChess && !_isInClassroom;
       mobObject.visible = mobVisible;
       visionIndicator.visible = mobVisible && matryoshkaVisionSetting.checked;
-      matryoshkaHitboxHelper.visible = mobVisible && matryoshkaHitboxSetting.checked;
+      matryoshkaHitboxHelper.visible =
+        mobVisible && matryoshkaHitboxSetting.checked;
       scene.add(mobObject, visionIndicator, matryoshkaHitboxHelper);
       const mob: MatryoshkaMob = {
         object: mobObject,
@@ -3576,8 +3575,10 @@ parkingLotLoader.load(
     );
 
     const chessLoader = new GLTFLoader();
-    const chessUrl = new URL("../assets/chess/eyes-dream_core.glb", import.meta.url)
-      .href;
+    const chessUrl = new URL(
+      "../assets/chess/eyes-dream_core.glb",
+      import.meta.url,
+    ).href;
     chessLoader.load(
       chessUrl,
       (gltf) => {
@@ -4400,7 +4401,8 @@ function startWeaponReload(): void {
     source.connect(gain);
     gain.connect(gunshotAudioContext.destination);
     source.onended = () => {
-      if (reloadSoundSource !== source || generation !== reloadGeneration) return;
+      if (reloadSoundSource !== source || generation !== reloadGeneration)
+        return;
       reloadSoundSource = null;
       weaponAmmo = weaponMagazineSize;
       weaponReloading = false;
@@ -5189,7 +5191,10 @@ crosshairOutlineThicknessSetting.addEventListener("input", () => {
       settingPixelsToRem(crosshairOutlineThicknessSetting.value),
     ),
   );
-  syncSizeSettingLabel(crosshairOutlineThicknessSetting, crosshairOutlineThicknessValue);
+  syncSizeSettingLabel(
+    crosshairOutlineThicknessSetting,
+    crosshairOutlineThicknessValue,
+  );
 });
 crosshairGapSetting.addEventListener("input", () => {
   crosshairPreviewTargets.forEach((crosshairTarget) =>
@@ -5338,9 +5343,9 @@ resolutionScaleSetting.addEventListener("input", () => {
 const keys = new Set<string>();
 const movement = new THREE.Vector3();
 const direction = new THREE.Vector3();
-const sprintJumpDirection = new THREE.Vector3();
-const sprintJumpForward = new THREE.Vector3();
-const sprintJumpRight = new THREE.Vector3();
+const jumpMomentumDirection = new THREE.Vector3();
+const jumpMomentumForward = new THREE.Vector3();
+const jumpMomentumRight = new THREE.Vector3();
 const playerHeight = 3.4;
 const playerCollisionRadius = 0.18;
 const gravity = 18;
@@ -5395,7 +5400,7 @@ const weaponPickupWorldPosition = new THREE.Vector3();
 const weaponPickupToPlayerDirection = new THREE.Vector3();
 let verticalVelocity = 0;
 let isGrounded = false;
-let sprintingInAir = false;
+let jumpMomentumActive = false;
 
 function isKeyWithinPickupRange(): boolean {
   if (
@@ -5435,7 +5440,10 @@ function updateKeyInteractionPrompt(): void {
     vehicleSearchHint.textContent = "PRESS [F] TO OPEN BACK DOOR";
     const showBackDoorPrompt =
       !classroomBackDoorOpening && isClassroomBackDoorWithinInteractionRange();
-    vehicleSearchHint.classList.toggle("interaction-prompt", showBackDoorPrompt);
+    vehicleSearchHint.classList.toggle(
+      "interaction-prompt",
+      showBackDoorPrompt,
+    );
     vehicleSearchHint.hidden = !showBackDoorPrompt;
     classroomSeatPrompt.hidden =
       !weaponPickupCollected || !isClassroomSeatWithinInteractionRange();
@@ -5475,9 +5483,7 @@ function isClassroomBackDoorWithinInteractionRange(): boolean {
     camera.position.z - classroomBackDoorHandlePosition.z,
   );
   if (horizontalDistance > classroomBackDoorInteractionDistance) return false;
-  const horizontalLookDirection = camera.getWorldDirection(
-    new THREE.Vector3(),
-  );
+  const horizontalLookDirection = camera.getWorldDirection(new THREE.Vector3());
   horizontalLookDirection.y = 0;
   horizontalLookDirection.normalize();
   keyPickupToPlayerDirection
@@ -5549,8 +5555,7 @@ function updateClassroomStudentsFacingPlayer(): void {
   if (!classroomSeatActive) {
     alertClassroomStudents(performance.now() / 1000);
   }
-  if (classroomSeatActive && !classroomStudentsAlerted)
-    return;
+  if (classroomSeatActive && !classroomStudentsAlerted) return;
   classroomStudents.forEach((student) => {
     if (classroomDeadStudents.has(student)) return;
     student.lookAt(camera.position.x, student.position.y, camera.position.z);
@@ -5577,7 +5582,9 @@ function knockDownClassroomStudent(
     fallAxis,
     -Math.PI / 2,
   );
-  const targetQuaternion = student.quaternion.clone().premultiply(fallQuaternion);
+  const targetQuaternion = student.quaternion
+    .clone()
+    .premultiply(fallQuaternion);
   gsap.to(student.quaternion, {
     x: targetQuaternion.x,
     y: targetQuaternion.y,
@@ -6106,38 +6113,47 @@ function handleKeyDown(event: KeyboardEvent): void {
     event.code === "Space" &&
     controls.isLocked &&
     !_isInClassroom &&
-    isGrounded
+    isGrounded &&
+    playerStamina >= PLAYER_JUMP_STAMINA_COST
   ) {
     event.preventDefault();
-    sprintingInAir =
+    playerStamina -= PLAYER_JUMP_STAMINA_COST;
+    jumpMomentumActive =
+      keys.has("KeyW") ||
+      keys.has("KeyA") ||
+      keys.has("KeyS") ||
+      keys.has("KeyD");
+    const sprintJumpRequested =
       keys.has("KeyW") &&
       !weaponReloading &&
       (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
       playerSprintActive;
-    if (sprintingInAir) {
-      sprintJumpSpeed =
-        playerWalkSpeed +
-        (playerRunSpeed - playerWalkSpeed) *
-          playerSprintAcceleration *
-          getStaminaSprintFactor();
+    if (jumpMomentumActive) {
+      jumpMomentumSpeed = sprintJumpRequested
+        ? playerWalkSpeed +
+          (playerRunSpeed - playerWalkSpeed) *
+            playerSprintAcceleration *
+            getStaminaSprintFactor()
+        : playerWalkSpeed;
       camera.updateWorldMatrix(true, false);
-      camera.getWorldDirection(sprintJumpForward);
-      sprintJumpForward.y = 0;
-      sprintJumpForward.normalize();
-      sprintJumpRight.setFromMatrixColumn(camera.matrixWorld, 0);
-      sprintJumpRight.y = 0;
-      sprintJumpRight.normalize();
-      sprintJumpDirection
-        .copy(sprintJumpRight)
+      camera.getWorldDirection(jumpMomentumForward);
+      jumpMomentumForward.y = 0;
+      jumpMomentumForward.normalize();
+      jumpMomentumRight.setFromMatrixColumn(camera.matrixWorld, 0);
+      jumpMomentumRight.y = 0;
+      jumpMomentumRight.normalize();
+      jumpMomentumDirection
+        .copy(jumpMomentumRight)
         .multiplyScalar(Number(keys.has("KeyD")) - Number(keys.has("KeyA")))
         .addScaledVector(
-          sprintJumpForward,
+          jumpMomentumForward,
           Number(keys.has("KeyW")) - Number(keys.has("KeyS")),
         );
-      if (sprintJumpDirection.lengthSq() > 0) sprintJumpDirection.normalize();
+      if (jumpMomentumDirection.lengthSq() > 0)
+        jumpMomentumDirection.normalize();
       else {
-        sprintingInAir = false;
-        sprintJumpSpeed = playerWalkSpeed;
+        jumpMomentumActive = false;
+        jumpMomentumSpeed = playerWalkSpeed;
       }
     }
     verticalVelocity = jumpVelocity;
@@ -6258,7 +6274,7 @@ const enterEpisode = createEpisodeEntryController({
   setEpisodeFlags: (episodeId) => {
     _isInChess = episodeId === "chess";
     _isInClassroom = episodeId === "classroom";
-    sprintingInAir = false;
+    jumpMomentumActive = false;
     parkingLotFearActive = false;
     classroomFearActive = false;
     fearActive = false;
@@ -6715,13 +6731,13 @@ function movePlayerWithCollision(distance: THREE.Vector3): void {
   }
 }
 
-function movePlayerWithSprintJumpMomentum(delta: number): void {
-  const distance = sprintJumpSpeed * delta;
+function movePlayerWithJumpMomentum(delta: number): void {
+  const distance = jumpMomentumSpeed * delta;
   const stepCount = Math.max(1, Math.ceil(distance / 0.08));
   const stepDistance = distance / stepCount;
   for (let stepIndex = 0; stepIndex < stepCount; stepIndex += 1) {
-    if (isWorldWallAhead(sprintJumpDirection, stepDistance)) break;
-    camera.position.addScaledVector(sprintJumpDirection, stepDistance);
+    if (isWorldWallAhead(jumpMomentumDirection, stepDistance)) break;
+    camera.position.addScaledVector(jumpMomentumDirection, stepDistance);
     resolveParkingCollision();
   }
 }
@@ -7271,24 +7287,30 @@ function updateProjectiles(now: number, delta: number): void {
     const classroomStudentAccepted = Boolean(
       classroomStudentHit &&
       (!parkingSurfaceHit ||
-        classroomStudentHit.hit.distance <= parkingSurfaceHit.distance)
+        classroomStudentHit.hit.distance <= parkingSurfaceHit.distance),
     );
     const projectileExpired = now - projectile.bornAt > projectileLifetime;
     if (
       projectileHitLogSetting.checked &&
       _isInClassroom &&
-      (classroomStudentAccepted || parkingSurfaceHit || hitFloor || projectileExpired)
+      (classroomStudentAccepted ||
+        parkingSurfaceHit ||
+        hitFloor ||
+        projectileExpired)
     ) {
       if (classroomStudentAccepted && classroomStudentHit) {
         console.info("[Projectile hit] classroom student", {
           studentPosition: classroomStudentHit.student.position.toArray(),
-          mesh: classroomStudentHit.hit.object.name || classroomStudentHit.hit.object.type,
+          mesh:
+            classroomStudentHit.hit.object.name ||
+            classroomStudentHit.hit.object.type,
           impactPosition: classroomStudentHit.hit.point.toArray(),
           distance: classroomStudentHit.hit.distance,
         });
       } else if (parkingSurfaceHit) {
         console.info("[Projectile blocked] classroom surface", {
-          surface: parkingSurfaceHit.object.name || parkingSurfaceHit.object.type,
+          surface:
+            parkingSurfaceHit.object.name || parkingSurfaceHit.object.type,
           impactPosition: parkingSurfaceHit.point.toArray(),
           distance: parkingSurfaceHit.distance,
           studentCandidate: classroomStudentHit
@@ -7617,6 +7639,7 @@ const clock = new THREE.Clock();
 let weaponSwayFactor = 0;
 let movementBobPhase = 0;
 let wasRunning = false;
+let runningBobStrength = 0;
 let cameraBobOffset = 0;
 const cameraBobAxis = new THREE.Vector3(0, 0, 1);
 const cameraBobQuaternion = new THREE.Quaternion();
@@ -7684,23 +7707,25 @@ function render(): void {
       !weaponReloading &&
       (keys.has("ShiftLeft") || keys.has("ShiftRight")) &&
       playerSprintActive;
-    const sprintAccelerationTarget = sprintRequested || sprintingInAir ? 1 : 0;
+    const sprintAccelerationTarget =
+      sprintRequested ||
+      (jumpMomentumActive && jumpMomentumSpeed > playerWalkSpeed)
+        ? 1
+        : 0;
     playerSprintAcceleration +=
       (sprintAccelerationTarget - playerSprintAcceleration) *
       Math.min(1, delta * 3.5);
-    frameSprintSpeed = sprintingInAir
-      ? sprintJumpSpeed
+    frameSprintSpeed = jumpMomentumActive
+      ? jumpMomentumSpeed
       : playerWalkSpeed +
         (playerRunSpeed - playerWalkSpeed) *
           playerSprintAcceleration *
           getStaminaSprintFactor();
-    if (sprintingInAir) {
-      movePlayerWithSprintJumpMomentum(delta);
+    if (jumpMomentumActive) {
+      movePlayerWithJumpMomentum(delta);
     } else if (direction.lengthSq() > 0) {
       direction.normalize();
-      movement
-        .copy(direction)
-        .multiplyScalar(frameSprintSpeed * delta);
+      movement.copy(direction).multiplyScalar(frameSprintSpeed * delta);
       movePlayerWithCollision(movement);
     }
 
@@ -7716,20 +7741,20 @@ function render(): void {
   if (trueCarEntered) updateTrueCarSeatPosition();
   else resolveParkingCollision();
   if (isGrounded) {
-    if (sprintingInAir) {
+    if (jumpMomentumActive) {
       const staminaFactor = getStaminaSprintFactor();
       playerSprintAcceleration =
         staminaFactor > 0
           ? THREE.MathUtils.clamp(
-              (sprintJumpSpeed - playerWalkSpeed) /
+              (jumpMomentumSpeed - playerWalkSpeed) /
                 ((playerRunSpeed - playerWalkSpeed) * staminaFactor),
               0,
               1,
             )
           : 0;
     }
-    sprintingInAir = false;
-    sprintJumpDirection.set(0, 0, 0);
+    jumpMomentumActive = false;
+    jumpMomentumDirection.set(0, 0, 0);
   }
   if (trueCarEntered && trueCar && Number.isFinite(carEndingShakeStartedAt)) {
     const shakeElapsed = performance.now() / 1000 - carEndingShakeStartedAt;
@@ -7770,6 +7795,10 @@ function render(): void {
     isGrounded &&
     !classroomSeatActive &&
     frameSprintSpeed > playerWalkSpeed + 0.02;
+  const runningBobTarget = isRunning ? runningFeedbackStrength : 0;
+  runningBobStrength +=
+    (runningBobTarget - runningBobStrength) * Math.min(1, delta * 8);
+  if (Math.abs(runningBobStrength) < 0.001) runningBobStrength = 0;
   const cadenceScale = THREE.MathUtils.clamp(
     frameSprintSpeed / playerRunSpeed,
     0.01,
@@ -7794,23 +7823,18 @@ function render(): void {
   } else {
     stopRunningSound();
   }
-  if (!isRunning && isMoving)
-    movementBobPhase +=
-      delta * 7;
+  if (!isRunning && isMoving) movementBobPhase += delta * 7;
   else if (!isRunning) movementBobPhase += delta * 2;
-  if (controls.isLocked && !trueCarEntered && isRunning) {
-    const bobStrength = 0.075 * runningFeedbackStrength;
+  if (controls.isLocked && !trueCarEntered && runningBobStrength > 0) {
+    const bobStrength = 0.075 * runningBobStrength;
     cameraBobOffset = Math.sin(movementBobPhase) * bobStrength;
     camera.position.y += cameraBobOffset;
     const bobRoll =
-      Math.sin(movementBobPhase * (isRunning ? 0.5 : 1)) *
-      (isRunning ? 0.018 : 0.006) *
-      runningFeedbackStrength;
+      Math.sin(movementBobPhase * 0.5) * 0.018 * runningBobStrength;
     cameraBobQuaternion.setFromAxisAngle(cameraBobAxis, bobRoll);
     camera.quaternion.multiply(cameraBobQuaternion);
-  } else if (cameraBobQuaternion.angleTo(identityQuaternion) > 0.0001) {
-    cameraBobQuaternion.slerp(identityQuaternion, Math.min(1, delta * 12));
-    camera.quaternion.multiply(cameraBobQuaternion);
+  } else {
+    cameraBobQuaternion.identity();
   }
   const isAirborne =
     controls.isLocked && camera.position.y > playerHeight + 0.05;
